@@ -4,14 +4,19 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 
 | Módulo | O que faz |
 |---|---|
-| **Painel** | Resumo do dia: contas atrasadas ou próximas, remédios de hoje (com check), cardápio, tarefas e compromissos |
+| **Painel** | Resumo do dia: recados do mural, lista de compras, contas atrasadas ou próximas, remédios de hoje (com check), cardápio, tarefas e compromissos |
+| **Mural** | Recados rápidos entre vocês (“chego tarde hoje”), com opção de fixar no topo e marcar 👍 visto |
 | **Contas** | Contas mensais ou únicas, valor, vencimento, categoria, quem paga, forma de pagamento. Marca como paga e guarda a data e o valor pago |
 | **Remédios** | Remédio, para quem, dose, horários, como tomar, início e fim. Checklist diário de doses tomadas |
 | **Alimentação** | Cardápio fixo da semana (café, almoço, lanche e jantar) e observações da dieta |
 | **Calendário** | Compromissos (com repetição semanal, mensal ou anual — bom para aniversários) e vencimentos das contas |
 | **Tarefas** | Tarefas únicas (com prazo) e rotinas que se repetem (todo dia, em dias da semana ou uma vez por mês), por cômodo e responsável |
+| **Listas** | Listas compartilhadas (compras, farmácia, casa…): um adiciona, o outro vê na hora no mercado; mostra quem adicionou |
+| **Contatos** | Médicos, escola, serviços da casa e números de emergência, com botão de ligar e de WhatsApp |
 | **Imprimir** | Folhas A4 prontas para deixar nos lugares certos da casa |
-| **Ajustes** | Nomes das pessoas, nome da casa, backup e restauração |
+| **Ajustes** | Nomes das pessoas, nome da casa, “este aparelho é de…”, backup e restauração |
+
+Mural, listas e contatos foram inspirados no app FamilyWall.
 
 ### Folhas para imprimir
 
@@ -23,6 +28,8 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 | Contas do mês (com campo "pago em") | Escritório / pasta de contas | Retrato |
 | Calendário do mês | Mural / corredor | Paisagem |
 | Rotina de tarefas da semana | Lavanderia / cozinha | Paisagem |
+| Lista de compras (com linhas em branco para completar à mão) | Porta da geladeira / bolsa | Retrato |
+| Telefones úteis (emergência em destaque) | Geladeira / perto do telefone | Retrato |
 
 Na janela de impressão você também pode escolher **"Salvar como PDF"** para mandar por WhatsApp.
 
@@ -101,6 +108,8 @@ supabase/schema.sql   tabela, segurança (RLS) e tempo real
 
 ## Ideias para as próximas versões
 - Lembretes por notificação no celular (horário do remédio, conta vencendo amanhã)
-- Lista de compras gerada a partir do cardápio
+- Ingredientes do cardápio enviados direto para a lista de compras
+- Receitas da família ligadas ao cardápio
+- Documentos importantes (fotos de RG, carteirinha do convênio, garantias)
 - Controle de estoque de remédios ("acaba em 5 dias")
 - Histórico de gastos por mês e categoria (gráfico anual)

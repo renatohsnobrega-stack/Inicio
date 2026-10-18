@@ -12,6 +12,10 @@ const D = (() => {
   const TIPOS_TAREFA = [['unica', 'Uma vez'], ['diaria', 'Todo dia'], ['semanal', 'Dias da semana'], ['mensal', 'Todo mês']];
   const REPETE = [['nao', 'Não repete'], ['semanal', 'Toda semana'], ['mensal', 'Todo mês'], ['anual', 'Todo ano']];
 
+  const LISTAS_SUGERIDAS = [['🛒', 'Compras'], ['💊', 'Farmácia'], ['🔧', 'Casa / manutenção'], ['🎁', 'Presentes e desejos']];
+  const CATEG_CONTATO = ['Emergência', 'Saúde', 'Família', 'Escola', 'Serviços da casa', 'Trabalho', 'Outros'];
+  const CORES = ['#2f6f5e', '#b0527a', '#4a6fa5', '#b7791f', '#7a5aa8'];
+
   const config = id => Store.get('config', id) || {};
   const pessoas = () => {
     const n = (config('pessoas').nomes || []).filter(Boolean);
@@ -19,6 +23,36 @@ const D = (() => {
   };
   const responsaveis = () => [...pessoas(), 'Ambos'];
   const casaNome = () => config('casa').nome || 'Nossa Casa';
+
+  // Quem está usando este aparelho (fica só neste navegador).
+  const eu = () => { try { return localStorage.getItem('casa:eu') || ''; } catch { return ''; } };
+  const setEu = nome => { try { localStorage.setItem('casa:eu', nome); } catch { /* sem armazenamento */ } };
+  const corDe = nome => { const i = pessoas().indexOf(nome); return CORES[(i < 0 ? pessoas().length : i) % CORES.length]; };
+
+  // ---------- Mural ----------
+  const recados = () => Store.list('recado')
+    .sort((a, b) => (b.fixado ? 1 : 0) - (a.fixado ? 1 : 0) || (b.em || '').localeCompare(a.em || ''));
+
+  // ---------- Listas ----------
+  const listas = () => Store.list('lista').sort((a, b) => (a.criadaEm || '').localeCompare(b.criadaEm || ''));
+  const itensDa = id => Store.list('item').filter(i => i.lista === id)
+    .sort((a, b) => a.feito - b.feito || (a.criadoEm || '').localeCompare(b.criadoEm || ''));
+
+  // ---------- Contatos ----------
+  const contatos = () => Store.list('contato').sort((a, b) => a.nome.localeCompare(b.nome));
+  const contatosPorCategoria = () => {
+    const g = U.groupBy(contatos(), c => c.categoria || 'Outros');
+    return Object.keys(g).sort((a, b) => {
+      const ia = CATEG_CONTATO.indexOf(a), ib = CATEG_CONTATO.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+    }).map(cat => [cat, g[cat]]);
+  };
+  const telLink = tel => 'tel:' + String(tel || '').replace(/[^\d+]/g, '');
+  const waLink = tel => {
+    let d = String(tel || '').replace(/\D/g, '');
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    return 'https://wa.me/' + d;
+  };
 
   // ---------- Contas ----------
   function billOccurrences(month) {
@@ -139,8 +173,9 @@ const D = (() => {
   }
 
   return {
-    SLOTS, CATEGORIAS, LOCAIS, TIPOS_TAREFA, REPETE, STATUS_LABEL,
-    config, pessoas, responsaveis, casaNome,
+    SLOTS, CATEGORIAS, LOCAIS, TIPOS_TAREFA, REPETE, STATUS_LABEL, LISTAS_SUGERIDAS, CATEG_CONTATO,
+    config, pessoas, responsaveis, casaNome, eu, setEu, corDe,
+    recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
     billOccurrences, billStatus, contasAtencao,
     medActiveOn, doseKey, dosesOn,
     mealId, meal,

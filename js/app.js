@@ -6,13 +6,14 @@
   const state = {
     contasMes: U.thisMonth(),
     calMes: U.thisMonth(),
+    lista: null,
     print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth() },
   };
 
   const NAV = [
-    ['painel', 'Painel', '🏠'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
+    ['painel', 'Painel', '🏠'], ['mural', 'Mural', '📌'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
     ['alimentacao', 'Alimentação', '🍽️'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
-    ['imprimir', 'Imprimir', '🖨️'], ['ajustes', 'Ajustes', '⚙️'],
+    ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['imprimir', 'Imprimir', '🖨️'], ['ajustes', 'Ajustes', '⚙️'],
   ];
 
   // ---------- Componentes ----------
@@ -63,6 +64,29 @@
       <span class="date">${U.fmtDay(date)}</span><span class="time">${esc(ev.hora || '')}</span>
       <span class="grow"><strong>${esc(ev.titulo)}</strong><small>${esc([ev.pessoa, ev.local].filter(Boolean).join(' · '))}</small></span></button>`;
 
+  const personSelect = (name, selected) => `<select name="${name}">${D.pessoas().map(p =>
+    `<option ${p === selected ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>`;
+
+  const noteCard = r => {
+    const curtidas = r.curtidas || [];
+    const eu = D.eu();
+    return `<article class="note ${r.fixado ? 'pinned' : ''}" style="--c:${D.corDe(r.autor)}">
+      <header><strong>${esc(r.autor || '—')}</strong><small>${U.timeAgo(r.em)}</small><span class="spacer"></span>
+        ${btn(r.fixado ? '📌 Fixado' : '📌', 'pin-note', `data-id="${esc(r.id)}" title="${r.fixado ? 'Desafixar' : 'Fixar no topo'}"`, 'small ghost')}
+        ${btn('✕', 'del-note', `data-id="${esc(r.id)}" aria-label="Excluir"`, 'small ghost')}</header>
+      <p>${nl2br(r.texto)}</p>
+      <footer>${btn(`👍 ${curtidas.includes(eu) ? 'Visto' : 'Ok, vi'}`, 'like-note', `data-id="${esc(r.id)}"`, `small ${curtidas.includes(eu) ? 'primary' : ''}`)}
+        ${curtidas.length ? `<small>${esc(curtidas.join(', '))} viu</small>` : ''}</footer>
+    </article>`;
+  };
+  const noteMini = r => `<div class="note-mini" style="--c:${D.corDe(r.autor)}">${r.fixado ? '📌 ' : ''}<strong>${esc(r.autor || '—')}:</strong>
+      ${esc(r.texto.length > 140 ? r.texto.slice(0, 140) + '…' : r.texto)} <small class="muted">${U.timeAgo(r.em)}</small></div>`;
+
+  const itemRow = i => `<label class="check-row ${i.feito ? 'done' : ''}">
+      <input type="checkbox" data-action="toggle-item" data-id="${esc(i.id)}" ${i.feito ? 'checked' : ''}>
+      <span class="grow"><strong>${esc(i.texto)}</strong>${i.por ? `<span class="by"> · ${esc(i.por)}</span>` : ''}</span>
+      ${btn('✕', 'del-item', `data-id="${esc(i.id)}" aria-label="Remover"`, 'small ghost')}</label>`;
+
   // ---------- Telas ----------
   function painel() {
     const t = U.today();
@@ -76,8 +100,11 @@
     const tarefas = D.tasksOn(t);
     const tarefasPend = tarefas.filter(x => !x.feito).length;
     const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)));
+    const recados = D.recados().slice(0, 4);
+    const compras = D.listas()[0];
+    const itens = compras ? D.itensDa(compras.id).filter(i => !i.feito) : [];
 
-    return pageHead(`Olá! Hoje é ${U.longDate(t)}`, D.casaNome(), printBtn('dia', `data-date="${t}"`)) + `
+    return pageHead(`Olá${D.eu() ? `, ${esc(D.eu())}` : ''}! Hoje é ${U.longDate(t)}`, D.casaNome(), printBtn('dia', `data-date="${t}"`)) + `
       <div class="stats">
         ${stat('A pagar no mês', brl(aPagar))}
         ${stat('Contas atrasadas', atrasadas.length, atrasadas.length ? 'bad' : 'good')}
@@ -85,6 +112,12 @@
         ${stat('Tarefas pendentes', tarefasPend, tarefasPend ? '' : 'good')}
       </div>
       <div class="grid-2">
+        ${panel('📌 Mural', recados.length ? recados.map(noteMini).join('') : emptyMsg('Nenhum recado. Deixe um para quem chega em casa!'),
+          `<a href="#/mural" class="more">escrever</a>`)}
+        ${panel(compras ? `${esc(compras.icone || '🛒')} ${esc(compras.nome)} (${itens.length})` : '🛒 Listas',
+          itens.length ? itens.slice(0, 8).map(itemRow).join('') + (itens.length > 8 ? `<p class="muted small">+ ${itens.length - 8} itens</p>` : '')
+            : emptyMsg(compras ? 'Lista vazia.' : 'Crie sua lista de compras compartilhada.'),
+          `<a href="#/listas" class="more">abrir</a>`)}
         ${panel('💊 Remédios de hoje', doses.length ? doses.map(doseRow).join('') : emptyMsg('Nenhum remédio para hoje.'),
           `<a href="#/remedios" class="more">ver todos</a>`)}
         ${panel('💰 Contas atrasadas e próximas', atencao.length ? atencao.map(o => billRow(o)).join('') : emptyMsg('Nada vencendo nos próximos 10 dias. 🎉'),
@@ -220,6 +253,66 @@
       ${feitas.length ? `<details class="panel"><summary>Concluídas recentemente</summary>${feitas.map(pendRow).join('')}</details>` : ''}`;
   }
 
+  function mural() {
+    const lista = D.recados();
+    return pageHead('Mural da família', 'Recados rápidos entre vocês — aparecem no painel e no celular do outro') + `
+      <form class="panel post-form" data-form="recado">
+        <textarea name="texto" rows="3" required placeholder="Escreva um recado… ex.: “Comprei o remédio da sua mãe”, “Chego tarde hoje”, “Não esquecer a reunião da escola”"></textarea>
+        <div class="post-actions">
+          <label>De ${personSelect('autor', D.eu())}</label>
+          <label class="switch"><input type="checkbox" name="fixado"> 📌 Fixar no topo</label>
+          <span class="spacer"></span><button class="btn primary" type="submit">Publicar</button>
+        </div>
+      </form>
+      <div class="wall">${lista.length ? lista.map(noteCard).join('') : emptyMsg('Nenhum recado ainda.')}</div>`;
+  }
+
+  function listas() {
+    const ls = D.listas();
+    const head = pageHead('Listas compartilhadas', 'Um adiciona, o outro vê na hora — ótimo para usar no mercado',
+      (ls.length ? printBtn('compras', `data-lista="${esc(state.lista || ls[0].id)}"`) : '') + btn('+ Nova lista', 'new-list'));
+    if (!ls.length) {
+      return head + panel('Comece criando suas listas', `<p class="muted">Sugestões:</p><div class="suggest">
+        ${D.LISTAS_SUGERIDAS.map(([icone, nome]) => btn(`${icone} ${nome}`, 'create-list', `data-icone="${icone}" data-nome="${esc(nome)}"`)).join('')}</div>`);
+    }
+    const cur = ls.find(l => l.id === state.lista) || ls[0];
+    state.lista = cur.id;
+    const itens = D.itensDa(cur.id);
+    const pend = itens.filter(i => !i.feito);
+    const feitos = itens.filter(i => i.feito);
+    return head + `
+      <div class="tabs">${ls.map(l => `<button type="button" class="tab ${l.id === cur.id ? 'active' : ''}" data-action="pick-list" data-id="${esc(l.id)}">
+        ${esc(l.icone || '📝')} ${esc(l.nome)}<span class="count">${D.itensDa(l.id).filter(i => !i.feito).length}</span></button>`).join('')}</div>
+      <section class="panel">
+        <form class="quick-add" data-form="item" data-lista="${esc(cur.id)}">
+          <input name="texto" placeholder="Adicionar item… (ex.: 2 L de leite)" autocomplete="off" enterkeyhint="done">
+          <button class="btn primary" type="submit">Adicionar</button>
+        </form>
+        ${pend.length ? pend.map(itemRow).join('') : emptyMsg('Nada pendente nesta lista.')}
+        ${feitos.length ? `<div class="done-head"><span>✔ Já resolvidos (${feitos.length})</span>
+          ${btn('Limpar marcados', 'clear-done', `data-lista="${esc(cur.id)}"`, 'small')}</div>${feitos.map(itemRow).join('')}` : ''}
+        <div class="actions" style="margin-top:12px">${btn('Editar / excluir lista', 'edit-list', `data-id="${esc(cur.id)}"`, 'small ghost')}</div>
+      </section>`;
+  }
+
+  function contatos() {
+    const grupos = D.contatosPorCategoria();
+    const temEmergencia = D.contatos().some(c => c.categoria === 'Emergência');
+    const card = c => `<article class="card contact">
+      <header><h3>${esc(c.nome)}</h3>${btn('Editar', 'edit-contact', `data-id="${esc(c.id)}"`, 'small ghost')}</header>
+      ${c.telefone ? `<a class="tel" href="${esc(D.telLink(c.telefone))}">📞 ${esc(c.telefone)}</a>` : ''}
+      ${c.endereco ? `<p class="muted small">📍 ${esc(c.endereco)}</p>` : ''}
+      ${c.obs ? `<p class="muted small">${esc(c.obs)}</p>` : ''}
+      ${c.whatsapp && c.telefone ? `<div class="links"><a class="btn small" href="${esc(D.waLink(c.telefone))}" target="_blank" rel="noopener">WhatsApp</a></div>` : ''}
+    </article>`;
+    return pageHead('Contatos úteis', 'Médicos, escola, serviços da casa e emergência — imprima e deixe na geladeira',
+      printBtn('contatos') + btn('+ Novo contato', 'new-contact', '', 'primary')) + `
+      ${temEmergencia ? '' : panel('Números de emergência', `<p class="muted">Quer adicionar os números públicos de emergência (190, 192, 193)?</p>
+        ${btn('Adicionar números de emergência', 'add-emergency')}`)}
+      ${grupos.length ? grupos.map(([cat, lista]) => `<h2 class="group-title ${cat === 'Emergência' ? 'alert' : ''}">${esc(cat)}</h2>
+        <div class="cards">${lista.map(card).join('')}</div>`).join('') : emptyMsg('Nenhum contato cadastrado.')}`;
+  }
+
   function imprimir() {
     const p = state.print;
     const { sheet, html } = Print.render(p.sheet, p);
@@ -227,6 +320,8 @@
       date: `<label>Dia <input type="date" data-action="print-param" data-key="date" value="${p.date}"></label>`,
       week: `<label>Semana que contém o dia <input type="date" data-action="print-param" data-key="week" value="${p.week}"></label>`,
       month: `<label>Mês <input type="month" data-action="print-param" data-key="month" value="${p.month}"></label>`,
+      lista: `<label>Lista <select data-action="print-param" data-key="lista">${D.listas().map(l =>
+        `<option value="${esc(l.id)}" ${l.id === p.lista ? 'selected' : ''}>${esc(l.nome)}</option>`).join('')}</select></label>`,
     }[sheet.param] || '';
     return pageHead('Central de impressão', 'Folhas A4 prontas para deixar nos lugares certos da casa') + `
       <div class="print-layout">
@@ -251,6 +346,10 @@
           <label>Pessoa 2<input name="p2" value="${esc(nomes[1] || '')}"></label>
           <label>Outras pessoas (separadas por vírgula — filhos, avós…)<input name="outros" value="${esc(nomes.slice(2).join(', '))}"></label>
           <button class="btn primary" type="submit">Salvar</button></form>`)}
+        ${panel('Este aparelho', `<p class="muted">Diga de quem é este celular/computador. Usado para assinar recados e mostrar quem adicionou itens nas listas.</p>
+          <label class="form-inline">Este aparelho é de
+            <select data-action="set-eu"><option value="">— escolher —</option>${D.pessoas().map(p =>
+              `<option ${p === D.eu() ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>`)}
         ${panel('Onde ficam os dados', cloud
           ? `<p>☁️ <b>Modo nuvem</b> — dados sincronizados entre vocês dois.</p><p class="muted">Conectado como ${esc(Store.user()?.email || '')}</p>
              ${btn('Sair', 'sign-out')}`
@@ -263,7 +362,7 @@
       </div>`;
   }
 
-  const VIEWS = { painel, contas, remedios, alimentacao, calendario, tarefas, imprimir, ajustes };
+  const VIEWS = { painel, mural, contas, remedios, alimentacao, calendario, tarefas, listas, contatos, imprimir, ajustes };
 
   // ---------- Render ----------
   const currentRoute = () => {
@@ -479,6 +578,40 @@
     });
   }
 
+  function listForm(l = {}) {
+    openForm({
+      title: l.id ? 'Editar lista' : 'Nova lista',
+      values: l,
+      fields: [
+        { name: 'nome', label: 'Nome da lista', required: true },
+        { name: 'icone', label: 'Ícone (emoji)', default: '📝', hint: 'Ex.: 🛒 💊 🔧 🎁 🧳' },
+      ],
+      onSave: async v => { const nova = await Store.put('lista', { criadaEm: new Date().toISOString(), ...l, ...v }); state.lista = nova.id; render(true); },
+      onDelete: l.id ? async () => {
+        await Store.removeMany('item', D.itensDa(l.id).map(i => i.id));
+        await Store.remove('lista', l.id);
+        state.lista = null;
+      } : null,
+    });
+  }
+
+  function contactForm(c = {}) {
+    openForm({
+      title: c.id ? 'Editar contato' : 'Novo contato',
+      values: c,
+      fields: [
+        { name: 'nome', label: 'Nome', required: true, hint: 'Ex.: Dra. Ana (cardiologista), Escola, Encanador João' },
+        { name: 'categoria', label: 'Categoria', type: 'select', options: D.CATEG_CONTATO, default: 'Saúde' },
+        { name: 'telefone', label: 'Telefone', type: 'tel' },
+        { name: 'whatsapp', label: 'Tem WhatsApp', type: 'bool', default: false },
+        { name: 'endereco', label: 'Endereço' },
+        { name: 'obs', label: 'Observações', type: 'textarea', hint: 'Ex.: convênio, horário de atendimento, nº da carteirinha' },
+      ],
+      onSave: v => Store.put('contato', { ...c, ...v }),
+      onDelete: c.id ? () => Store.remove('contato', c.id) : null,
+    });
+  }
+
   // ---------- Ações ----------
   const ACTIONS = {
     'month-shift': el => { state[el.dataset.key] = U.addMonths(state[el.dataset.key], +el.dataset.n); render(true); },
@@ -486,6 +619,7 @@
       state.print.sheet = el.dataset.sheet;
       if (el.dataset.month) state.print.month = el.dataset.month;
       if (el.dataset.date) state.print.date = el.dataset.date;
+      if (el.dataset.lista) state.print.lista = el.dataset.lista;
       location.hash = '#/imprimir';
     },
 
@@ -517,7 +651,7 @@
     'toggle-dose': el => {
       const key = el.dataset.key;
       if (Store.get('dose', key)) Store.remove('dose', key);
-      else Store.put('dose', { id: key, por: Store.user()?.email || '', em: new Date().toISOString() });
+      else Store.put('dose', { id: key, por: D.eu() || Store.user()?.email || '', em: new Date().toISOString() });
     },
 
     'new-event': el => eventForm({ data: el.dataset.date || U.today() }),
@@ -550,6 +684,44 @@
     'print-sheet': el => { state.print.sheet = el.dataset.sheet; render(true); },
     'print-param': el => { if (el.value) state.print[el.dataset.key] = el.value; render(true); },
     'do-print': () => Print.print(state.print.sheet, state.print),
+
+    'pin-note': el => { const r = Store.get('recado', el.dataset.id); Store.put('recado', { ...r, fixado: !r.fixado }); },
+    'del-note': el => { if (confirm('Excluir este recado?')) Store.remove('recado', el.dataset.id); },
+    'like-note': el => {
+      const eu = D.eu();
+      if (!eu) { alert('Primeiro diga de quem é este aparelho em Ajustes.'); location.hash = '#/ajustes'; return; }
+      const r = Store.get('recado', el.dataset.id);
+      const curtidas = (r.curtidas || []).includes(eu) ? r.curtidas.filter(n => n !== eu) : [...(r.curtidas || []), eu];
+      Store.put('recado', { ...r, curtidas });
+    },
+
+    'new-list': () => listForm(),
+    'edit-list': el => listForm(Store.get('lista', el.dataset.id)),
+    'create-list': async el => {
+      const l = await Store.put('lista', { nome: el.dataset.nome, icone: el.dataset.icone, criadaEm: new Date().toISOString() });
+      state.lista = l.id;
+      render(true);
+    },
+    'pick-list': el => { state.lista = el.dataset.id; render(true); },
+    'toggle-item': el => {
+      const i = Store.get('item', el.dataset.id);
+      Store.put('item', { ...i, feito: !i.feito });
+    },
+    'del-item': (el, e) => { e.preventDefault(); Store.remove('item', el.dataset.id); },
+    'clear-done': el => {
+      const ids = D.itensDa(el.dataset.lista).filter(i => i.feito).map(i => i.id);
+      if (ids.length && confirm(`Remover ${ids.length} itens marcados?`)) Store.removeMany('item', ids);
+    },
+
+    'new-contact': () => contactForm(),
+    'edit-contact': el => contactForm(Store.get('contato', el.dataset.id)),
+    'add-emergency': async () => {
+      for (const [nome, telefone] of [['Polícia Militar', '190'], ['SAMU (ambulância)', '192'], ['Corpo de Bombeiros', '193'], ['Defesa Civil', '199']]) {
+        await Store.put('contato', { nome, telefone, categoria: 'Emergência', whatsapp: false });
+      }
+      toast('Números de emergência adicionados ✔');
+    },
+    'set-eu': el => { D.setEu(el.value); toast('Salvo ✔'); },
 
     'sign-out': () => Store.signOut(),
     export: () => {
@@ -596,8 +768,30 @@
       if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
       ACTIONS[el.dataset.action]?.(el, e);
     });
-    main.addEventListener('submit', e => {
+    main.addEventListener('submit', async e => {
       const form = e.target;
+      if (form.dataset.form === 'recado') {
+        e.preventDefault();
+        const f = new FormData(form);
+        const texto = String(f.get('texto') || '').trim();
+        if (!texto) return;
+        if (!D.eu()) D.setEu(f.get('autor'));
+        await Store.put('recado', { texto, autor: f.get('autor'), fixado: f.get('fixado') === 'on', em: new Date().toISOString(), curtidas: [] });
+        render(true);
+        toast('Recado publicado ✔');
+        return;
+      }
+      if (form.dataset.form === 'item') {
+        e.preventDefault();
+        const input = form.querySelector('input[name=texto]');
+        const textos = input.value.split(/\n|;/).map(t => t.trim()).filter(Boolean);
+        for (const texto of textos) {
+          await Store.put('item', { lista: form.dataset.lista, texto, feito: false, por: D.eu(), criadoEm: new Date().toISOString() });
+        }
+        render(true);
+        $main().querySelector('.quick-add input')?.focus();
+        return;
+      }
       if (form.dataset.form !== 'pessoas') return;
       e.preventDefault();
       const f = new FormData(form);

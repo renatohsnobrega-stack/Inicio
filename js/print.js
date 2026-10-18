@@ -10,6 +10,8 @@ const Print = (() => {
     { id: 'contas', nome: 'Contas do mês', onde: 'Escritório / pasta de contas', param: 'month', landscape: false },
     { id: 'calendario', nome: 'Calendário do mês', onde: 'Mural / corredor', param: 'month', landscape: true },
     { id: 'tarefas', nome: 'Rotina de tarefas da semana', onde: 'Lavanderia / cozinha', param: 'week', landscape: true },
+    { id: 'compras', nome: 'Lista de compras', onde: 'Porta da geladeira / bolsa', param: 'lista', landscape: false },
+    { id: 'contatos', nome: 'Telefones úteis', onde: 'Geladeira / perto do telefone', param: null, landscape: false },
   ];
 
   const head = (title, sub) => `<header class="sheet-head">
@@ -147,7 +149,30 @@ const Print = (() => {
     return html;
   }
 
-  const RENDER = { dia, remedios, cardapio, contas, calendario, tarefas };
+  function compras({ lista }) {
+    const listas = D.listas();
+    const l = listas.find(x => x.id === lista) || listas[0];
+    if (!l) return head('Lista de compras', '') + empty('Nenhuma lista criada ainda.');
+    const itens = D.itensDa(l.id).filter(i => !i.feito);
+    return head(`${l.icone || ''} ${l.nome}`.trim(), `Atualizada em ${U.fmtDate(U.today())}`) + `
+      <ul class="sheet-list cols big">${itens.map(i => `<li>${BOX}${esc(i.texto)}</li>`).join('')}
+        ${[...Array(Math.max(8, 30 - itens.length))].map(() => `<li>${BOX}<span class="blank"></span></li>`).join('')}</ul>`;
+  }
+
+  function contatos() {
+    const grupos = D.contatosPorCategoria();
+    let html = head('Telefones úteis', 'Em caso de emergência, mantenha a calma e ligue');
+    if (!grupos.length) return html + empty('Nenhum contato cadastrado.');
+    for (const [cat, lista] of grupos) {
+      html += `<h2 class="sheet-person ${cat === 'Emergência' ? 'alert' : ''}">${esc(cat)}</h2>
+        <table class="grid contacts"><tbody>${lista.map(c => `<tr><td><b>${esc(c.nome)}</b>${c.obs ? `<br><small>${esc(c.obs)}</small>` : ''}
+          ${c.endereco ? `<br><small>📍 ${esc(c.endereco)}</small>` : ''}</td>
+          <td class="tel">${esc(c.telefone)}${c.whatsapp ? ' <small>(WhatsApp)</small>' : ''}</td></tr>`).join('')}</tbody></table>`;
+    }
+    return html;
+  }
+
+  const RENDER = { dia, remedios, cardapio, contas, calendario, tarefas, compras, contatos };
 
   function render(id, params) {
     const sheet = SHEETS.find(s => s.id === id) || SHEETS[0];

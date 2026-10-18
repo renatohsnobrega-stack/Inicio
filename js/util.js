@@ -66,6 +66,16 @@ const U = (() => {
   const uid = () => (crypto.randomUUID ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
+  const timeAgo = iso => {
+    const min = Math.round((Date.now() - new Date(iso)) / 60000);
+    if (!iso || isNaN(min)) return '';
+    if (min < 1) return 'agora';
+    if (min < 60) return `há ${min} min`;
+    if (min < 60 * 24) return `há ${Math.round(min / 60)} h`;
+    if (min < 60 * 24 * 7) return `há ${Math.round(min / 1440)} d`;
+    return new Date(iso).toLocaleDateString('pt-BR');
+  };
+
   const groupBy = (arr, fn) => arr.reduce((acc, x) => {
     const k = fn(x);
     (acc[k] = acc[k] || []).push(x);
@@ -75,6 +85,6 @@ const U = (() => {
   return {
     pad, ymd, parseYmd, addDays, addMonths, daysInMonth, mondayIndex, startOfWeek, today, thisMonth,
     WD, WDS, MONTHS, monthLabel, fmtDate, fmtDay, longDate, esc, nl2br, brl, parseMoney, parseTimes,
-    uid, groupBy,
+    uid, groupBy, timeAgo,
   };
 })();
