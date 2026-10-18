@@ -1052,7 +1052,10 @@ ${kinds}`;
         document.body.classList.remove('logged-out');
         await start();
       } catch (err) {
-        document.getElementById('login-err').textContent = 'Não foi possível entrar: ' + err.message;
+        const msg = /invalid login credentials/i.test(err.message) ? 'E-mail ou senha incorretos.'
+          : /email not confirmed/i.test(err.message) ? 'E-mail ainda não confirmado. Confirme o usuário no Supabase.'
+          : err.message;
+        document.getElementById('login-err').textContent = 'Não foi possível entrar: ' + msg;
       }
     };
   }

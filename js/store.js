@@ -4,7 +4,7 @@
 // Cada registro é guardado como { kind, id, data } — ex.: kind "conta", "remedio", "tarefa".
 const Store = (() => {
   const LS_KEY = 'casa-organizada:v1';
-  const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
+  const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js';
   let cache = {};
   let mode = 'local';
   let sb = null;
