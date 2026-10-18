@@ -1,0 +1,666 @@
+// Telas, navegação e formulários.
+(() => {
+  const { esc, nl2br, brl } = U;
+  const $main = () => document.getElementById('main');
+
+  const state = {
+    contasMes: U.thisMonth(),
+    calMes: U.thisMonth(),
+    print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth() },
+  };
+
+  const NAV = [
+    ['painel', 'Painel', '🏠'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
+    ['alimentacao', 'Alimentação', '🍽️'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
+    ['imprimir', 'Imprimir', '🖨️'], ['ajustes', 'Ajustes', '⚙️'],
+  ];
+
+  // ---------- Componentes ----------
+  const pageHead = (title, sub, actions = '') => `<header class="page-head">
+      <div><h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>
+      <div class="actions">${actions}</div></header>`;
+  const btn = (label, action, attrs = '', cls = '') =>
+    `<button type="button" class="btn ${cls}" data-action="${action}" ${attrs}>${label}</button>`;
+  const printBtn = (sheet, extra = '') => btn('🖨️ Imprimir', 'goto-print', `data-sheet="${sheet}" ${extra}`);
+  const monthNav = (key, month) => `<div class="month-nav">
+      ${btn('‹', 'month-shift', `data-key="${key}" data-n="-1" aria-label="Mês anterior"`, 'icon')}
+      <strong>${U.monthLabel(month)}</strong>
+      ${btn('›', 'month-shift', `data-key="${key}" data-n="1" aria-label="Próximo mês"`, 'icon')}
+    </div>`;
+  const emptyMsg = msg => `<p class="empty">${msg}</p>`;
+  const panel = (title, body, actions = '') => `<section class="panel">
+      <header class="panel-head"><h2>${title}</h2>${actions}</header>${body}</section>`;
+  const stat = (label, value, tone = '') => `<div class="stat ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
+  const opts = arr => arr.map(o => (Array.isArray(o) ? o : [o, o]));
+
+  const doseRow = d => `<label class="check-row ${d.tomado ? 'done' : ''}">
+      <input type="checkbox" data-action="toggle-dose" data-key="${esc(d.key)}" ${d.tomado ? 'checked' : ''}>
+      <span class="time">${d.hora}</span>
+      <span class="grow"><strong>${esc(d.med.nome)}</strong>${d.med.dose ? ` · ${esc(d.med.dose)}` : ''}
+        <small>${esc([d.med.pessoa, d.med.instrucoes].filter(Boolean).join(' · '))}</small></span></label>`;
+
+  const taskRow = t => `<label class="check-row ${t.feito ? 'done' : ''}">
+      <input type="checkbox" data-action="toggle-task" data-id="${esc(t.tarefa.id)}" data-date="${t.date}" ${t.feito ? 'checked' : ''}>
+      <span class="grow"><strong>${esc(t.tarefa.titulo)}</strong>
+        <small>${esc([t.tarefa.responsavel, t.tarefa.local, D.freqLabel(t.tarefa)].filter(Boolean).join(' · '))}</small></span></label>`;
+
+  const billRow = (o, extra = '') => {
+    const st = D.billStatus(o);
+    return `<div class="row status-${st}">
+      <span class="date">${U.fmtDay(o.venc)}</span>
+      <span class="grow"><strong>${esc(o.conta.nome)}</strong>
+        <small>${esc([o.conta.responsavel, o.conta.forma].filter(Boolean).join(' · '))}</small></span>
+      <span class="badge ${st}">${D.STATUS_LABEL[st]}</span>
+      <span class="money">${brl(o.valor)}</span>
+      ${o.pago
+        ? btn('Desfazer', 'unpay-bill', `data-id="${esc(o.conta.id)}" data-mes="${o.mes}"`, 'small ghost')
+        : btn('Pagar', 'pay-bill', `data-id="${esc(o.conta.id)}" data-mes="${o.mes}"`, 'small primary')}
+      ${extra}
+    </div>`;
+  };
+
+  const eventLine = ({ date, ev }) => `<button type="button" class="row link" data-action="edit-event" data-id="${esc(ev.id)}">
+      <span class="date">${U.fmtDay(date)}</span><span class="time">${esc(ev.hora || '')}</span>
+      <span class="grow"><strong>${esc(ev.titulo)}</strong><small>${esc([ev.pessoa, ev.local].filter(Boolean).join(' · '))}</small></span></button>`;
+
+  // ---------- Telas ----------
+  function painel() {
+    const t = U.today();
+    const wd = U.mondayIndex(new Date());
+    const doses = D.dosesOn(t);
+    const tomadas = doses.filter(d => d.tomado).length;
+    const atencao = D.contasAtencao(10);
+    const atrasadas = atencao.filter(o => D.billStatus(o) === 'atrasada');
+    const mes = D.billOccurrences(U.thisMonth());
+    const aPagar = mes.filter(o => !o.pago).reduce((s, o) => s + o.valor, 0);
+    const tarefas = D.tasksOn(t);
+    const tarefasPend = tarefas.filter(x => !x.feito).length;
+    const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)));
+
+    return pageHead(`Olá! Hoje é ${U.longDate(t)}`, D.casaNome(), printBtn('dia', `data-date="${t}"`)) + `
+      <div class="stats">
+        ${stat('A pagar no mês', brl(aPagar))}
+        ${stat('Contas atrasadas', atrasadas.length, atrasadas.length ? 'bad' : 'good')}
+        ${stat('Remédios hoje', `${tomadas}/${doses.length}`, doses.length && tomadas === doses.length ? 'good' : '')}
+        ${stat('Tarefas pendentes', tarefasPend, tarefasPend ? '' : 'good')}
+      </div>
+      <div class="grid-2">
+        ${panel('💊 Remédios de hoje', doses.length ? doses.map(doseRow).join('') : emptyMsg('Nenhum remédio para hoje.'),
+          `<a href="#/remedios" class="more">ver todos</a>`)}
+        ${panel('💰 Contas atrasadas e próximas', atencao.length ? atencao.map(o => billRow(o)).join('') : emptyMsg('Nada vencendo nos próximos 10 dias. 🎉'),
+          `<a href="#/contas" class="more">ver mês</a>`)}
+        ${panel('🍽️ Cardápio de hoje', `<dl class="meals-today">${D.SLOTS.map(s =>
+          `<dt>${s.nome}</dt><dd>${nl2br(D.meal(wd, s.id)) || '<span class="muted">—</span>'}</dd>`).join('')}</dl>`,
+          `<a href="#/alimentacao" class="more">editar</a>`)}
+        ${panel('✅ Tarefas de hoje', tarefas.length ? tarefas.map(taskRow).join('') : emptyMsg('Nenhuma tarefa para hoje.'),
+          `<a href="#/tarefas" class="more">ver todas</a>`)}
+        ${panel('📅 Próximos 14 dias', eventos.length ? eventos.map(eventLine).join('') : emptyMsg('Nenhum compromisso.'),
+          btn('+ Evento', 'new-event', `data-date="${t}"`, 'small'))}
+      </div>`;
+  }
+
+  function contas() {
+    const occ = D.billOccurrences(state.contasMes);
+    const total = occ.reduce((s, o) => s + o.valor, 0);
+    const pago = occ.filter(o => o.pago).reduce((s, o) => s + o.valor, 0);
+    const atrasado = occ.filter(o => D.billStatus(o) === 'atrasada').reduce((s, o) => s + o.valor, 0);
+    const porCat = Object.entries(U.groupBy(occ, o => o.conta.categoria || 'Outros'))
+      .map(([cat, l]) => [cat, l.reduce((s, o) => s + o.valor, 0)]).sort((a, b) => b[1] - a[1]);
+    const todas = Store.list('conta').sort((a, b) => a.nome.localeCompare(b.nome));
+
+    return pageHead('Contas e pagamentos', 'Valores, vencimentos e o que já foi pago',
+      printBtn('contas', `data-month="${state.contasMes}"`) + btn('+ Nova conta', 'new-bill', '', 'primary')) + `
+      ${monthNav('contasMes', state.contasMes)}
+      <div class="stats">
+        ${stat('Total do mês', brl(total))}${stat('Já pago', brl(pago), 'good')}
+        ${stat('A pagar', brl(total - pago))}${stat('Atrasado', brl(atrasado), atrasado ? 'bad' : '')}
+      </div>
+      <div class="grid-2 wide-first">
+        ${panel('Vencimentos do mês', occ.length ? occ.map(o => billRow(o,
+          btn('✎', 'edit-bill', `data-id="${esc(o.conta.id)}" aria-label="Editar"`, 'small ghost icon'))).join('')
+          : emptyMsg('Nenhuma conta neste mês. Clique em “Nova conta”.'))}
+        ${panel('Por categoria', porCat.length ? `<div class="bars">${porCat.map(([cat, v]) => `<div class="bar-row">
+            <span>${esc(cat)}</span><span class="bar"><i style="width:${total ? (v / total * 100).toFixed(1) : 0}%"></i></span>
+            <span class="money">${brl(v)}</span></div>`).join('')}</div>` : emptyMsg('—'))}
+      </div>
+      ${panel(`Contas cadastradas (${todas.length})`, todas.length ? `<div class="table-wrap"><table class="table">
+        <thead><tr><th>Conta</th><th>Quando</th><th>Valor</th><th>Categoria</th><th>Responsável</th><th></th></tr></thead>
+        <tbody>${todas.map(b => `<tr><td><strong>${esc(b.nome)}</strong></td>
+          <td>${b.tipo === 'unica' ? U.fmtDate(b.data) : `Todo dia ${esc(b.dia)}${b.fim ? ` até ${esc(b.fim)}` : ''}`}</td>
+          <td>${brl(b.valor)}</td><td>${esc(b.categoria)}</td><td>${esc(b.responsavel)}</td>
+          <td>${btn('Editar', 'edit-bill', `data-id="${esc(b.id)}"`, 'small ghost')}</td></tr>`).join('')}</tbody></table></div>`
+        : emptyMsg('Nenhuma conta cadastrada.'))}`;
+  }
+
+  function remedios() {
+    const t = U.today();
+    const doses = D.dosesOn(t);
+    const meds = Store.list('remedio').sort((a, b) => (a.pessoa || '').localeCompare(b.pessoa || '') || a.nome.localeCompare(b.nome));
+    const card = m => {
+      const ativo = D.medActiveOn(m, t);
+      return `<article class="card ${ativo ? '' : 'inactive'}">
+        <header><h3>${esc(m.nome)}</h3>${btn('Editar', 'edit-med', `data-id="${esc(m.id)}"`, 'small ghost')}</header>
+        <p><strong>${esc(m.pessoa || '')}</strong>${m.dose ? ` · ${esc(m.dose)}` : ''}</p>
+        <div class="chips">${(m.horarios || []).map(h => `<span class="chip">${h}</span>`).join('') || '<span class="muted">sem horário fixo</span>'}</div>
+        ${m.instrucoes ? `<p class="muted">${esc(m.instrucoes)}</p>` : ''}
+        <p class="muted small">${m.inicio ? `De ${U.fmtDate(m.inicio)} ` : ''}${m.fim ? `até ${U.fmtDate(m.fim)}` : 'Uso contínuo'}${ativo ? '' : ' · inativo'}</p>
+      </article>`;
+    };
+    return pageHead('Remédios', 'Horários, doses e controle do que já foi tomado',
+      printBtn('remedios') + btn('+ Novo remédio', 'new-med', '', 'primary')) + `
+      <div class="grid-2 wide-first">
+        ${panel(`Hoje — ${U.longDate(t)}`, doses.length ? doses.map(doseRow).join('') : emptyMsg('Nenhuma dose para hoje.'))}
+        ${panel('Dica', `<p class="muted">Imprima o <b>quadro de remédios da semana</b> e deixe no banheiro ou na cozinha.
+          Quem tomar marca no papel — ou aqui no painel, que sincroniza com o celular do outro.</p>`)}
+      </div>
+      <div class="cards">${meds.length ? meds.map(card).join('') : emptyMsg('Nenhum remédio cadastrado.')}</div>`;
+  }
+
+  function alimentacao() {
+    const hoje = U.mondayIndex(new Date());
+    return pageHead('Rotina alimentar', 'Cardápio fixo da semana — as alterações são salvas automaticamente',
+      printBtn('cardapio')) + `
+      <div class="week-grid">${U.WD.map((dia, wd) => `<section class="day-card ${wd === hoje ? 'today' : ''}">
+        <h3>${dia}${wd === hoje ? ' <span class="badge hoje">hoje</span>' : ''}</h3>
+        ${D.SLOTS.map(s => `<label class="meal"><span>${s.nome}</span>
+          <textarea rows="2" data-action="save-meal" data-id="${D.mealId(wd, s.id)}" placeholder="—">${esc(D.meal(wd, s.id))}</textarea></label>`).join('')}
+      </section>`).join('')}</div>
+      ${panel('Observações / regras da alimentação', `<textarea class="full" rows="4" data-action="save-meal-obs"
+        placeholder="Ex.: beber 2L de água, sem fritura durante a semana, fruta no lanche…">${esc(D.config('alimentacao').obs || '')}</textarea>`)}`;
+  }
+
+  function calendario() {
+    const month = state.calMes;
+    const [y, m] = month.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const contasPorDia = U.groupBy(D.billOccurrences(month), o => o.venc);
+    const t = U.today();
+    const cells = [];
+    for (let d = U.startOfWeek(first); d.getMonth() === m - 1 || d < first || U.mondayIndex(d) !== 0; d = U.addDays(d, 1)) {
+      const date = U.ymd(d);
+      if (date.slice(0, 7) !== month) { cells.push('<div class="cal-cell out"></div>'); continue; }
+      cells.push(`<div class="cal-cell ${date === t ? 'today' : ''}" data-action="new-event" data-date="${date}">
+        <span class="dn">${d.getDate()}</span>
+        ${D.eventsOn(date).map(ev => `<button type="button" class="ev" data-action="edit-event" data-id="${esc(ev.id)}">${ev.hora ? `<b>${esc(ev.hora)}</b> ` : ''}${esc(ev.titulo)}</button>`).join('')}
+        ${(contasPorDia[date] || []).map(o => `<span class="ev bill ${o.pago ? 'paid' : ''}">💰 ${esc(o.conta.nome)}</span>`).join('')}
+      </div>`);
+    }
+    const last = U.ymd(new Date(y, m, 0));
+    const eventos = D.eventsBetween(`${month}-01`, last);
+    return pageHead('Calendário', 'Clique em um dia para adicionar um compromisso',
+      printBtn('calendario', `data-month="${month}"`) + btn('+ Evento', 'new-event', `data-date="${t}"`, 'primary')) + `
+      ${monthNav('calMes', month)}
+      <div class="cal">${U.WDS.map(d => `<div class="cal-h">${d}</div>`).join('')}${cells.join('')}</div>
+      ${panel('Compromissos do mês', eventos.length ? eventos.map(eventLine).join('') : emptyMsg('Nenhum compromisso neste mês.'))}`;
+  }
+
+  function tarefas() {
+    const t = U.today();
+    const hoje = D.tasksOn(t);
+    const all = Store.list('tarefa');
+    const rotina = all.filter(D.isRecorrente).sort((a, b) => (a.local || '').localeCompare(b.local || '') || a.titulo.localeCompare(b.titulo));
+    const pend = all.filter(x => !D.isRecorrente(x) && !x.feito).sort((a, b) => (a.data || '9').localeCompare(b.data || '9'));
+    const feitas = all.filter(x => !D.isRecorrente(x) && x.feito).sort((a, b) => (b.feitoEm || '').localeCompare(a.feitoEm || '')).slice(0, 15);
+    const pendRow = x => `<div class="row ${x.data && x.data < t ? 'status-atrasada' : ''}">
+      <input type="checkbox" data-action="toggle-task" data-id="${esc(x.id)}" data-date="${t}" ${x.feito ? 'checked' : ''} aria-label="Concluir">
+      <span class="grow"><strong>${esc(x.titulo)}</strong><small>${esc([x.responsavel, x.local, D.freqLabel(x)].filter(Boolean).join(' · '))}</small></span>
+      ${btn('Editar', 'edit-task', `data-id="${esc(x.id)}"`, 'small ghost')}</div>`;
+
+    return pageHead('Tarefas e rotina da casa', 'Tarefas únicas e rotinas que se repetem',
+      printBtn('tarefas') + btn('+ Nova tarefa', 'new-task', '', 'primary')) + `
+      <div class="grid-2">
+        ${panel('Hoje', hoje.length ? hoje.map(taskRow).join('') : emptyMsg('Nada para hoje.'))}
+        ${panel(`Pendências (${pend.length})`, pend.length ? pend.map(pendRow).join('') : emptyMsg('Sem pendências. 🎉'))}
+      </div>
+      ${panel(`Rotina (${rotina.length})`, rotina.length ? `<div class="table-wrap"><table class="table">
+        <thead><tr><th>Tarefa</th><th>Quando</th><th>Quem</th><th>Onde</th><th></th></tr></thead>
+        <tbody>${rotina.map(x => `<tr><td><strong>${esc(x.titulo)}</strong></td><td>${esc(D.freqLabel(x))}</td>
+          <td>${esc(x.responsavel)}</td><td>${esc(x.local)}</td><td>${btn('Editar', 'edit-task', `data-id="${esc(x.id)}"`, 'small ghost')}</td></tr>`).join('')}
+        </tbody></table></div>` : emptyMsg('Cadastre tarefas que se repetem: lavar roupa, tirar o lixo, regar plantas…'))}
+      ${feitas.length ? `<details class="panel"><summary>Concluídas recentemente</summary>${feitas.map(pendRow).join('')}</details>` : ''}`;
+  }
+
+  function imprimir() {
+    const p = state.print;
+    const { sheet, html } = Print.render(p.sheet, p);
+    const param = {
+      date: `<label>Dia <input type="date" data-action="print-param" data-key="date" value="${p.date}"></label>`,
+      week: `<label>Semana que contém o dia <input type="date" data-action="print-param" data-key="week" value="${p.week}"></label>`,
+      month: `<label>Mês <input type="month" data-action="print-param" data-key="month" value="${p.month}"></label>`,
+    }[sheet.param] || '';
+    return pageHead('Central de impressão', 'Folhas A4 prontas para deixar nos lugares certos da casa') + `
+      <div class="print-layout">
+        <div class="print-side">
+          <div class="sheet-list-picker">${Print.SHEETS.map(s => `<button type="button" class="sheet-pick ${s.id === sheet.id ? 'active' : ''}"
+            data-action="print-sheet" data-sheet="${s.id}"><strong>${s.nome}</strong><small>📍 ${s.onde} · ${s.landscape ? 'paisagem' : 'retrato'}</small></button>`).join('')}</div>
+          <div class="print-params">${param}${btn('🖨️ Imprimir esta folha', 'do-print', '', 'primary block')}</div>
+          <p class="muted small">Dica: na janela de impressão, escolha “Salvar como PDF” para guardar ou mandar por WhatsApp.</p>
+        </div>
+        <div class="preview-wrap"><div class="preview-scale"><div class="sheet ${sheet.landscape ? 'landscape' : ''}">${html}</div></div></div>
+      </div>`;
+  }
+
+  function ajustes() {
+    const nomes = D.pessoas();
+    const cloud = Store.mode() === 'cloud';
+    return pageHead('Ajustes', '') + `
+      <div class="grid-2">
+        ${panel('Casa e pessoas', `<form class="form-inline" data-form="pessoas">
+          <label>Nome da casa (aparece nas impressões)<input name="casa" value="${esc(D.casaNome())}"></label>
+          <label>Pessoa 1<input name="p1" value="${esc(nomes[0] || '')}"></label>
+          <label>Pessoa 2<input name="p2" value="${esc(nomes[1] || '')}"></label>
+          <label>Outras pessoas (separadas por vírgula — filhos, avós…)<input name="outros" value="${esc(nomes.slice(2).join(', '))}"></label>
+          <button class="btn primary" type="submit">Salvar</button></form>`)}
+        ${panel('Onde ficam os dados', cloud
+          ? `<p>☁️ <b>Modo nuvem</b> — dados sincronizados entre vocês dois.</p><p class="muted">Conectado como ${esc(Store.user()?.email || '')}</p>
+             ${btn('Sair', 'sign-out')}`
+          : `<p>💻 <b>Modo local</b> — os dados ficam só neste navegador.</p>
+             <p class="muted">Para usar em dois celulares com login, configure o Supabase (veja o README). Leva uns 15 minutos e é gratuito.</p>`)}
+        ${panel('Backup', `<p class="muted">Baixe uma cópia de tudo de vez em quando. Também serve para levar os dados do modo local para a nuvem.</p>
+          <div class="actions">${btn('⬇️ Baixar backup', 'export')}
+          <label class="btn">⬆️ Restaurar backup<input type="file" accept="application/json" data-action="import" hidden></label></div>`)}
+        ${panel('Limpeza', `<p class="muted">Apaga o histórico de remédios tomados com mais de 90 dias.</p>${btn('Limpar histórico antigo', 'prune-doses')}`)}
+      </div>`;
+  }
+
+  const VIEWS = { painel, contas, remedios, alimentacao, calendario, tarefas, imprimir, ajustes };
+
+  // ---------- Render ----------
+  const currentRoute = () => {
+    const r = location.hash.replace(/^#\/?/, '');
+    return VIEWS[r] ? r : 'painel';
+  };
+  let pending = false;
+  function render(force = false) {
+    const main = $main();
+    const ae = document.activeElement;
+    // Não atrapalha quem está digitando quando chega atualização do outro celular.
+    if (!force && main.contains(ae) && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type !== 'checkbox'))) {
+      pending = true;
+      return;
+    }
+    pending = false;
+    const r = currentRoute();
+    document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === r));
+    document.getElementById('brand-name').textContent = D.casaNome();
+    main.innerHTML = VIEWS[r]();
+    if (r === 'imprimir') fitPreview();
+  }
+
+  function fitPreview() {
+    const wrap = document.querySelector('.preview-wrap');
+    const scaler = document.querySelector('.preview-scale');
+    const sheet = scaler?.querySelector('.sheet');
+    if (!sheet) return;
+    const scale = Math.min(1, (wrap.clientWidth - 24) / sheet.offsetWidth);
+    scaler.style.transform = `scale(${scale})`;
+    scaler.style.height = `${sheet.offsetHeight * scale}px`;
+    scaler.style.width = `${sheet.offsetWidth * scale}px`;
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
+  // ---------- Formulário genérico ----------
+  function fieldHtml(f, val) {
+    const id = `f-${f.name}`;
+    const v = val ?? f.default ?? '';
+    let input;
+    switch (f.type) {
+      case 'select': {
+        const options = opts(f.options);
+        if (v !== '' && !options.some(([value]) => String(value) === String(v))) options.push([v, v]);
+        input = `<select id="${id}" name="${f.name}">${options.map(([value, label]) =>
+          `<option value="${esc(value)}" ${String(v) === String(value) ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
+        break;
+      }
+      case 'textarea':
+        input = `<textarea id="${id}" name="${f.name}" rows="3">${esc(v)}</textarea>`;
+        break;
+      case 'weekdays':
+        input = `<div class="weekdays">${U.WDS.map((d, i) => `<label><input type="checkbox" name="${f.name}" value="${i}"
+          ${(v || []).includes(i) ? 'checked' : ''}><span>${d}</span></label>`).join('')}</div>`;
+        break;
+      case 'bool':
+        return `<div class="field" data-field="${f.name}"><label class="switch"><input type="checkbox" name="${f.name}" ${v === false || v === '' ? '' : 'checked'}> ${esc(f.label)}</label></div>`;
+      case 'money':
+        input = `<input id="${id}" name="${f.name}" inputmode="decimal" placeholder="0,00" value="${v === '' ? '' : Number(v).toFixed(2).replace('.', ',')}">`;
+        break;
+      case 'times':
+        input = `<input id="${id}" name="${f.name}" placeholder="08:00, 20:00" value="${esc((v || []).join(', '))}">`;
+        break;
+      case 'combo':
+        input = `<input id="${id}" name="${f.name}" list="${id}-l" value="${esc(v)}"><datalist id="${id}-l">${f.options.map(o => `<option value="${esc(o)}">`).join('')}</datalist>`;
+        break;
+      default:
+        input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" value="${esc(v)}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
+    }
+    return `<div class="field" data-field="${f.name}"><label for="${id}">${esc(f.label)}${f.required ? ' *' : ''}</label>${input}${f.hint ? `<small class="muted">${esc(f.hint)}</small>` : ''}</div>`;
+  }
+
+  function readField(form, f) {
+    if (f.type === 'weekdays') return [...form.querySelectorAll(`input[name="${f.name}"]:checked`)].map(i => +i.value);
+    const el = form.querySelector(`[name="${f.name}"]`);
+    switch (f.type) {
+      case 'bool': return el.checked;
+      case 'money': return U.parseMoney(el.value);
+      case 'number': return el.value === '' ? '' : Number(el.value);
+      case 'times': return U.parseTimes(el.value);
+      default: return el.value.trim();
+    }
+  }
+
+  function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Salvar' }) {
+    const dlg = document.getElementById('modal');
+    dlg.innerHTML = `<form class="form" novalidate>
+      <header class="form-head"><h2>${esc(title)}</h2><button type="button" class="btn icon ghost" data-close aria-label="Fechar">✕</button></header>
+      <div class="form-body">${fields.map(f => fieldHtml(f, values[f.name])).join('')}</div>
+      <footer class="form-actions">${onDelete ? '<button type="button" class="btn danger" data-del>Excluir</button>' : ''}
+        <span class="spacer"></span><button type="button" class="btn" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">${esc(saveLabel)}</button></footer></form>`;
+    const form = dlg.querySelector('form');
+    const read = () => Object.fromEntries(fields.map(f => [f.name, readField(form, f)]));
+    const sync = () => {
+      const cur = read();
+      fields.forEach(f => { if (f.showIf) form.querySelector(`[data-field="${f.name}"]`).hidden = !f.showIf(cur); });
+    };
+    form.addEventListener('change', sync);
+    form.addEventListener('input', sync);
+    sync();
+    form.querySelectorAll('[data-close]').forEach(b => { b.onclick = () => dlg.close(); });
+    if (onDelete) {
+      form.querySelector('[data-del]').onclick = async () => {
+        if (!confirm('Excluir este item?')) return;
+        dlg.close();
+        await onDelete();
+        toast('Excluído');
+      };
+    }
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const data = read();
+      const missing = fields.find(f => f.required && (!f.showIf || f.showIf(data)) &&
+        (data[f.name] === '' || data[f.name] == null || (Array.isArray(data[f.name]) && !data[f.name].length)));
+      if (missing) {
+        alert(`Preencha: ${missing.label}`);
+        form.querySelector(`[name="${missing.name}"]`)?.focus();
+        return;
+      }
+      dlg.close();
+      await onSave(data);
+      toast('Salvo ✔');
+    };
+    dlg.showModal();
+    form.querySelector('input:not([type=checkbox]), select, textarea')?.focus();
+  }
+
+  // ---------- Formulários de cada módulo ----------
+  function billForm(conta = {}) {
+    openForm({
+      title: conta.id ? 'Editar conta' : 'Nova conta',
+      values: conta,
+      fields: [
+        { name: 'nome', label: 'Nome da conta', required: true },
+        { name: 'valor', label: 'Valor (R$)', type: 'money', hint: 'Para contas que variam (luz, água), coloque um valor aproximado e ajuste ao pagar.' },
+        { name: 'tipo', label: 'Repetição', type: 'select', options: [['mensal', 'Todo mês'], ['unica', 'Uma vez só']], default: 'mensal' },
+        { name: 'dia', label: 'Dia do vencimento', type: 'number', min: 1, max: 31, required: true, showIf: v => v.tipo === 'mensal' },
+        { name: 'data', label: 'Data do vencimento', type: 'date', required: true, showIf: v => v.tipo === 'unica' },
+        { name: 'inicio', label: 'A partir de (mês)', type: 'month', default: U.thisMonth(), showIf: v => v.tipo === 'mensal' },
+        { name: 'fim', label: 'Até (mês) — vazio se não tem fim', type: 'month', showIf: v => v.tipo === 'mensal' },
+        { name: 'categoria', label: 'Categoria', type: 'select', options: D.CATEGORIAS },
+        { name: 'responsavel', label: 'Quem paga', type: 'select', options: D.responsaveis() },
+        { name: 'forma', label: 'Forma de pagamento', type: 'combo', options: ['Boleto', 'Pix', 'Débito automático', 'Cartão de crédito', 'Dinheiro'] },
+        { name: 'obs', label: 'Observações (código de barras, site, login…)', type: 'textarea' },
+      ],
+      onSave: v => Store.put('conta', { ...conta, ...v }),
+      onDelete: conta.id ? () => Store.remove('conta', conta.id) : null,
+    });
+  }
+
+  function medForm(med = {}) {
+    openForm({
+      title: med.id ? 'Editar remédio' : 'Novo remédio',
+      values: med,
+      fields: [
+        { name: 'nome', label: 'Remédio', required: true },
+        { name: 'pessoa', label: 'Para quem', type: 'combo', options: D.pessoas(), default: D.pessoas()[0] },
+        { name: 'dose', label: 'Dose', hint: 'Ex.: 1 comprimido de 50mg, 10 gotas' },
+        { name: 'horarios', label: 'Horários', type: 'times', hint: 'Separe por vírgula. Ex.: 08:00, 14:00, 20:00' },
+        { name: 'instrucoes', label: 'Como tomar', hint: 'Ex.: em jejum, após o almoço, com água' },
+        { name: 'inicio', label: 'Início', type: 'date', default: U.today() },
+        { name: 'fim', label: 'Fim (vazio = uso contínuo)', type: 'date' },
+        { name: 'ativo', label: 'Ativo', type: 'bool', default: true },
+      ],
+      onSave: v => Store.put('remedio', { ...med, ...v }),
+      onDelete: med.id ? () => Store.remove('remedio', med.id) : null,
+    });
+  }
+
+  function eventForm(ev = {}) {
+    openForm({
+      title: ev.id ? 'Editar compromisso' : 'Novo compromisso',
+      values: ev,
+      fields: [
+        { name: 'titulo', label: 'O quê', required: true },
+        { name: 'data', label: 'Data', type: 'date', required: true },
+        { name: 'hora', label: 'Hora', type: 'time' },
+        { name: 'pessoa', label: 'Quem', type: 'select', options: D.responsaveis(), default: 'Ambos' },
+        { name: 'local', label: 'Local' },
+        { name: 'repete', label: 'Repetir', type: 'select', options: D.REPETE, hint: 'Use “Todo ano” para aniversários.' },
+        { name: 'obs', label: 'Observações', type: 'textarea' },
+      ],
+      onSave: v => Store.put('evento', { ...ev, ...v }),
+      onDelete: ev.id ? () => Store.remove('evento', ev.id) : null,
+    });
+  }
+
+  function taskForm(t = {}) {
+    openForm({
+      title: t.id ? 'Editar tarefa' : 'Nova tarefa',
+      values: t,
+      fields: [
+        { name: 'titulo', label: 'Tarefa', required: true },
+        { name: 'tipo', label: 'Frequência', type: 'select', options: D.TIPOS_TAREFA, default: 'unica' },
+        { name: 'data', label: 'Prazo (opcional)', type: 'date', showIf: v => v.tipo === 'unica' },
+        { name: 'dias', label: 'Dias da semana', type: 'weekdays', required: true, showIf: v => v.tipo === 'semanal' },
+        { name: 'dia', label: 'Dia do mês', type: 'number', min: 1, max: 31, required: true, showIf: v => v.tipo === 'mensal' },
+        { name: 'responsavel', label: 'Quem', type: 'select', options: D.responsaveis() },
+        { name: 'local', label: 'Onde (cômodo)', type: 'combo', options: D.LOCAIS },
+        { name: 'obs', label: 'Observações', type: 'textarea' },
+      ],
+      onSave: v => Store.put('tarefa', { ...t, ...v }),
+      onDelete: t.id ? () => Store.remove('tarefa', t.id) : null,
+    });
+  }
+
+  // ---------- Ações ----------
+  const ACTIONS = {
+    'month-shift': el => { state[el.dataset.key] = U.addMonths(state[el.dataset.key], +el.dataset.n); render(true); },
+    'goto-print': el => {
+      state.print.sheet = el.dataset.sheet;
+      if (el.dataset.month) state.print.month = el.dataset.month;
+      if (el.dataset.date) state.print.date = el.dataset.date;
+      location.hash = '#/imprimir';
+    },
+
+    'new-bill': () => billForm(),
+    'edit-bill': el => billForm(Store.get('conta', el.dataset.id)),
+    'pay-bill': el => {
+      const conta = Store.get('conta', el.dataset.id);
+      const mes = el.dataset.mes;
+      openForm({
+        title: `Pagar: ${conta.nome}`,
+        saveLabel: 'Marcar como paga',
+        fields: [
+          { name: 'data', label: 'Pago em', type: 'date', required: true, default: U.today() },
+          { name: 'valor', label: 'Valor pago (R$)', type: 'money', default: Number(conta.valor) || 0 },
+        ],
+        onSave: v => Store.put('conta', { ...conta, pagos: { ...(conta.pagos || {}), [mes]: v } }),
+      });
+    },
+    'unpay-bill': el => {
+      const conta = Store.get('conta', el.dataset.id);
+      if (!confirm(`Desmarcar o pagamento de "${conta.nome}"?`)) return;
+      const pagos = { ...(conta.pagos || {}) };
+      delete pagos[el.dataset.mes];
+      Store.put('conta', { ...conta, pagos });
+    },
+
+    'new-med': () => medForm(),
+    'edit-med': el => medForm(Store.get('remedio', el.dataset.id)),
+    'toggle-dose': el => {
+      const key = el.dataset.key;
+      if (Store.get('dose', key)) Store.remove('dose', key);
+      else Store.put('dose', { id: key, por: Store.user()?.email || '', em: new Date().toISOString() });
+    },
+
+    'new-event': el => eventForm({ data: el.dataset.date || U.today() }),
+    'edit-event': el => eventForm(Store.get('evento', el.dataset.id)),
+
+    'new-task': () => taskForm(),
+    'edit-task': el => taskForm(Store.get('tarefa', el.dataset.id)),
+    'toggle-task': el => {
+      const t = Store.get('tarefa', el.dataset.id);
+      const date = el.dataset.date;
+      if (D.isRecorrente(t)) {
+        const limite = U.ymd(U.addDays(new Date(), -120));
+        const feitos = Object.fromEntries(Object.entries(t.feitos || {}).filter(([d]) => d >= limite));
+        if (feitos[date]) delete feitos[date]; else feitos[date] = true;
+        Store.put('tarefa', { ...t, feitos });
+      } else {
+        Store.put('tarefa', { ...t, feito: !t.feito, feitoEm: t.feito ? null : date });
+      }
+    },
+
+    'save-meal': el => {
+      Store.put('refeicao', { id: el.dataset.id, texto: el.value.trim() });
+      toast('Cardápio salvo ✔');
+    },
+    'save-meal-obs': el => {
+      Store.put('config', { ...D.config('alimentacao'), id: 'alimentacao', obs: el.value.trim() });
+      toast('Salvo ✔');
+    },
+
+    'print-sheet': el => { state.print.sheet = el.dataset.sheet; render(true); },
+    'print-param': el => { if (el.value) state.print[el.dataset.key] = el.value; render(true); },
+    'do-print': () => Print.print(state.print.sheet, state.print),
+
+    'sign-out': () => Store.signOut(),
+    export: () => {
+      const blob = new Blob([JSON.stringify(Store.exportAll(), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `casa-organizada-backup-${U.today()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
+    import: async el => {
+      const file = el.files[0];
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        if (!confirm('Mesclar este backup com os dados atuais? Itens com o mesmo identificador serão substituídos.')) return;
+        await Store.importAll(data);
+        toast('Backup restaurado ✔');
+      } catch (err) {
+        alert('Arquivo inválido: ' + err.message);
+      } finally {
+        el.value = '';
+      }
+    },
+    'prune-doses': async () => {
+      const limite = U.ymd(U.addDays(new Date(), -90));
+      const ids = Store.list('dose').map(d => d.id).filter(id => id.slice(0, 10) < limite);
+      if (!ids.length) return toast('Nada para limpar');
+      if (!confirm(`Apagar ${ids.length} registros antigos?`)) return;
+      await Store.removeMany('dose', ids);
+      toast('Limpo ✔');
+    },
+  };
+
+  function bindEvents() {
+    const main = $main();
+    main.addEventListener('click', e => {
+      const el = e.target.closest('[data-action]');
+      if (!el || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      ACTIONS[el.dataset.action]?.(el, e);
+    });
+    main.addEventListener('change', e => {
+      const el = e.target.closest('[data-action]');
+      if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      ACTIONS[el.dataset.action]?.(el, e);
+    });
+    main.addEventListener('submit', e => {
+      const form = e.target;
+      if (form.dataset.form !== 'pessoas') return;
+      e.preventDefault();
+      const f = new FormData(form);
+      const nomes = [f.get('p1'), f.get('p2'), ...String(f.get('outros')).split(',')].map(s => String(s || '').trim()).filter(Boolean);
+      Store.put('config', { id: 'pessoas', nomes });
+      Store.put('config', { id: 'casa', nome: String(f.get('casa')).trim() });
+      toast('Salvo ✔');
+    });
+    document.addEventListener('focusout', () => { if (pending) setTimeout(() => render(), 0); });
+    window.addEventListener('hashchange', () => { render(true); window.scrollTo(0, 0); });
+    window.addEventListener('resize', fitPreview);
+    // Volta para o app no dia seguinte (tablet na cozinha, por exemplo) com "hoje" atualizado.
+    let lastDay = U.today();
+    setInterval(() => { if (U.today() !== lastDay) { lastDay = U.today(); render(); } }, 60000);
+  }
+
+  function showLogin() {
+    document.body.classList.add('logged-out');
+    $main().innerHTML = `<form class="login panel" id="login">
+      <img src="icon.svg" alt="" width="56" height="56"><h1>Casa Organizada</h1>
+      <p class="muted">Acesso restrito. Entre com seu e-mail e senha.</p>
+      <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
+      <label>Senha<input type="password" name="password" required autocomplete="current-password"></label>
+      <button class="btn primary block" type="submit">Entrar</button><p class="error" id="login-err"></p></form>`;
+    document.getElementById('login').onsubmit = async e => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      try {
+        await Store.signIn(f.get('email'), f.get('password'));
+        document.body.classList.remove('logged-out');
+        await start();
+      } catch (err) {
+        document.getElementById('login-err').textContent = 'Não foi possível entrar: ' + err.message;
+      }
+    };
+  }
+
+  async function start() {
+    if (Store.mode() === 'cloud') {
+      $main().innerHTML = '<p class="loading">Carregando…</p>';
+      await Store.loadCloud();
+    }
+    document.getElementById('nav').innerHTML = NAV.map(([r, label, icon]) =>
+      `<a href="#/${r}" data-route="${r}"><span class="ico">${icon}</span><span>${label}</span></a>`).join('');
+    document.getElementById('mode').innerHTML = Store.mode() === 'cloud'
+      ? `☁️ Sincronizado<br><small>${esc(Store.user()?.email || '')}</small>`
+      : '💻 Modo local<br><small>dados só neste navegador</small>';
+    Store.subscribe(() => render());
+    Store.setErrorHandler(err => toast('⚠️ Erro ao salvar: ' + (err.message || err)));
+    bindEvents();
+    render(true);
+  }
+
+  async function boot() {
+    try {
+      await Store.init();
+      if (Store.mode() === 'cloud' && !Store.user()) return showLogin();
+      await start();
+    } catch (err) {
+      console.error(err);
+      $main().innerHTML = `<div class="panel"><h2>Ops, algo deu errado</h2><p>${esc(err.message || err)}</p></div>`;
+    }
+  }
+
+  boot();
+})();
