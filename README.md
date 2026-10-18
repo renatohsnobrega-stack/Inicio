@@ -112,7 +112,8 @@ js/app.js             telas, formulários e navegação
 supabase/schema.sql   tabela, segurança (RLS), tempo real e API para agentes
 mcp/server.js         conector MCP para o Claude (sem dependências)
 docs/AUTOMACAO.md     guia de automação, endpoints e prompts prontos
-integracoes/          scripts prontos (ex.: sincronizar o Google Agenda sem IA)
+integracoes/          scripts prontos: Google Agenda e Google Tarefas/compras, sem IA
+testes/               testes automáticos das integrações (node testes/<arquivo>)
 ```
 
 ## Ideias para as próximas versões

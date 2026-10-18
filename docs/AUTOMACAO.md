@@ -1,12 +1,13 @@
 # 🤖 Automação: deixar a IA preencher o app
 
-O Casa Organizada aceita dados de fora por **5 caminhos**. Do mais simples ao mais automático:
+O Casa Organizada aceita dados de fora por **6 caminhos**. Do mais simples ao mais automático:
 
 | Caminho | Precisa de | Bom para |
 |---|---|---|
 | 1. **Colar de uma conversa** | nada (funciona até no modo local) | Levar para o app o que você conversou com o Claude, Gemini ou ChatGPT (remédios, rotina, contas) |
 | 2. **Importar agenda (.ics)** | nada | Trazer de uma vez o Google Agenda, Outlook ou Apple |
 | 2b. **Sincronizar Google Agenda (script)** | modo nuvem + conta Google | Agenda sempre em dia, de hora em hora, **sem IA e sem gastar tokens** |
+| 2c. **Sincronizar Google Tarefas (script)** | modo nuvem + conta Google | Tarefas e lista de compras iguais no app e no Google, nos dois sentidos, sem IA |
 | 3. **Conector MCP** | modo nuvem + Claude Desktop ou Claude Code | Falar com o Claude e ele grava direto no app |
 | 4. **API para agentes** | modo nuvem | Automações que rodam sozinhas: Claude (tarefas agendadas), Manus, Gemini, n8n, Zapier, Make |
 
@@ -47,6 +48,49 @@ gratuito e sem servidor, que copia a sua agenda para o app **de hora em hora**:
 O script cria e atualiza os compromissos e também tira do app os que forem apagados ou mudarem de dia na agenda.
 Ele só mexe nos eventos que vieram da agenda; o que vocês criarem no próprio app fica como está.
 Para parar, execute a função **desinstalar**.
+
+## 2c. Google Tarefas e lista de compras, nos dois sentidos (sem IA)
+
+O arquivo [`integracoes/google-tarefas.gs`](../integracoes/google-tarefas.gs) espelha duas listas do Google Tarefas no app,
+a cada 15 minutos:
+
+| No Google Tarefas | No app |
+|---|---|
+| Lista **Casa** | Tarefas avulsas ("Uma vez") |
+| Lista **Compras** | Listas → **Compras** |
+
+Criar, editar, concluir, reabrir ou apagar num lado aparece no outro. "Excluir tarefas concluídas" no Google também tira
+os itens do app. Se a mesma tarefa mudar nos dois lados entre duas sincronizações, vale a alteração mais recente.
+
+**Instalação (uns 5 minutos)**
+1. Em <https://script.google.com>, clique em **Novo projeto** e cole o conteúdo do arquivo.
+2. No menu da esquerda, em **Serviços**, clique em **+** e adicione **Google Tasks API**.
+3. Preencha o `CONFIG`: endereço do Supabase, chave publishable e uma chave criada em **Automação → API para agentes**
+   (de preferência uma chave só para este script, ex.: "Google Tarefas").
+4. Escolha a função **instalar** e clique em ▶ **Executar**. Autorize o acesso.
+
+As listas "Casa" e "Compras" são criadas no Google se não existirem. Para a Vanessa ver as mesmas listas no celular dela,
+o script deve ser instalado numa conta Google que os dois usem, ou cada um instala na própria conta (cada conta terá a
+sua cópia sincronizada com o mesmo app).
+
+**Limite:** o Google Tarefas não deixa outros programas lerem ou criarem repetições. As rotinas ("tirar o lixo seg/qua/sex")
+continuam só no app.
+
+**Por que não o Google Keep:** a API oficial do Keep não atende contas pessoais (@gmail.com), e as alternativas não oficiais
+exigem acesso total à conta Google. A lista "Compras" do Google Tarefas cumpre o mesmo papel: fica no celular, no Gmail e
+na Agenda. Para adicionar por voz, use o atalho da Siri abaixo.
+
+**Teste automático:** `node testes/google-tarefas.test.js` roda 17 verificações com o Google e o app simulados.
+
+### Atalho da Siri: "adicionar à lista de compras" (opcional)
+No iPhone, app **Atalhos** → **+**:
+1. Ação **Pedir Entrada** (texto): "O que comprar?"
+2. Ação **Obter Conteúdo do URL**:
+   - URL: `https://SEU-PROJETO.supabase.co/rest/v1/rpc/agente_salvar` · Método: **POST**
+   - Cabeçalhos: `apikey` = sua chave publishable · `Content-Type` = `application/json`
+   - Corpo (JSON): `chave` = sua chave do app · `registros` = lista com um dicionário
+     `{"tipo": "item", "dados": {"texto": <Entrada Fornecida>, "lista_nome": "Compras"}}`
+3. Dê o nome **"Adicionar à lista"**. Depois: "E aí Siri, adicionar à lista".
 
 ## 3. Conector MCP (Claude Desktop / Claude Code)
 
