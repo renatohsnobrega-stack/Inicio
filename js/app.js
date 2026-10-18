@@ -7,13 +7,17 @@
     contasMes: U.thisMonth(),
     calMes: U.thisMonth(),
     lista: null,
+    importacao: null, // pré-visualização da importação: [{ kind, data, erros }]
+    novaChave: null,  // chave de API recém-criada (mostrada uma vez)
+    chaves: null,
     print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth() },
   };
 
   const NAV = [
     ['painel', 'Painel', '🏠'], ['mural', 'Mural', '📌'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
     ['alimentacao', 'Alimentação', '🍽️'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
-    ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['imprimir', 'Imprimir', '🖨️'], ['ajustes', 'Ajustes', '⚙️'],
+    ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['imprimir', 'Imprimir', '🖨️'],
+    ['automacao', 'Automação', '🤖'], ['ajustes', 'Ajustes', '⚙️'],
   ];
 
   // ---------- Componentes ----------
@@ -53,6 +57,7 @@
         <small>${esc([o.conta.responsavel, o.conta.forma].filter(Boolean).join(' · '))}</small></span>
       <span class="badge ${st}">${D.STATUS_LABEL[st]}</span>
       <span class="money">${brl(o.valor)}</span>
+      ${o.conta.codigo && !o.pago ? btn('📋 Código', 'copy', `data-text="${esc(o.conta.codigo)}" title="Copiar código de barras / Pix"`, 'small ghost') : ''}
       ${o.pago
         ? btn('Desfazer', 'unpay-bill', `data-id="${esc(o.conta.id)}" data-mes="${o.mes}"`, 'small ghost')
         : btn('Pagar', 'pay-bill', `data-id="${esc(o.conta.id)}" data-mes="${o.mes}"`, 'small primary')}
@@ -101,6 +106,7 @@
     const tarefasPend = tarefas.filter(x => !x.feito).length;
     const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)));
     const recados = D.recados().slice(0, 4);
+    const revisar = D.paraRevisar();
     const compras = D.listas()[0];
     const itens = compras ? D.itensDa(compras.id).filter(i => !i.feito) : [];
 
@@ -111,6 +117,14 @@
         ${stat('Remédios hoje', `${tomadas}/${doses.length}`, doses.length && tomadas === doses.length ? 'good' : '')}
         ${stat('Tarefas pendentes', tarefasPend, tarefasPend ? '' : 'good')}
       </div>
+      ${revisar.length ? panel(`🤖 Adicionados automaticamente — para revisar (${revisar.length})`, revisar.map(({ kind, obj }) => `
+        <div class="row review">
+          <span class="ico">${Schema.KINDS[kind].icone}</span>
+          <span class="grow"><strong>${esc(Schema.resumo(kind, obj))}</strong><small>${esc(Schema.KINDS[kind].nome)} · via ${esc(obj.origem || 'agente')}</small></span>
+          ${btn('✔ Ok', 'review-ok', `data-kind="${kind}" data-id="${esc(obj.id)}"`, 'small primary')}
+          ${btn('Editar', 'review-edit', `data-kind="${kind}" data-id="${esc(obj.id)}"`, 'small')}
+          ${btn('✕', 'review-del', `data-kind="${kind}" data-id="${esc(obj.id)}" aria-label="Descartar"`, 'small ghost')}
+        </div>`).join('') + `<div class="actions" style="margin-top:8px">${btn('Aprovar todos', 'review-all', '', 'small')}</div>`) : ''}
       <div class="grid-2">
         ${panel('📌 Mural', recados.length ? recados.map(noteMini).join('') : emptyMsg('Nenhum recado. Deixe um para quem chega em casa!'),
           `<a href="#/mural" class="more">escrever</a>`)}
@@ -313,6 +327,149 @@
         <div class="cards">${lista.map(card).join('')}</div>`).join('') : emptyMsg('Nenhum contato cadastrado.')}`;
   }
 
+  function automacao() {
+    const cloud = Store.mode() === 'cloud';
+    const imp = state.importacao;
+    const validos = imp ? imp.filter(r => !r.erros.length) : [];
+    const previa = imp ? `<div class="import-preview">
+        <p><b>${validos.length}</b> de ${imp.length} registros prontos para importar.</p>
+        ${imp.map(r => `<div class="row ${r.erros.length ? 'status-atrasada' : ''}">
+          <span class="ico">${Schema.KINDS[r.kind]?.icone || '❓'}</span>
+          <span class="grow"><strong>${esc(Schema.KINDS[r.kind] ? Schema.resumo(r.kind, r.data) : r.kind)}</strong>
+            <small>${esc(Schema.KINDS[r.kind]?.nome || 'tipo desconhecido')}${r.erros.length ? ' · ⚠️ ' + esc(r.erros.join('; ')) : ''}${Store.get(r.kind, r.data.id) ? ' · já existe: será atualizado' : ''}</small></span>
+        </div>`).join('')}
+        <div class="actions" style="margin-top:10px">
+          ${btn(`Importar ${validos.length} registros`, 'import-confirm', validos.length ? '' : 'disabled', 'primary')}
+          ${btn('Cancelar', 'import-cancel', '', 'ghost')}</div></div>` : '';
+
+    const chaves = state.chaves;
+    const apiPanel = cloud ? `
+        <p class="muted">Crie uma chave para cada agente (ex.: “Claude – e-mails”, “Manus”). Se algo sair do controle, revogue a chave e pronto.</p>
+        <form class="quick-add" data-form="nova-chave"><input name="nome" placeholder="Nome do agente (ex.: Claude – contas do Gmail)">
+          <button class="btn primary" type="submit">Criar chave</button></form>
+        ${state.novaChave ? `<div class="secret"><p><b>Copie agora — esta chave não será mostrada de novo:</b></p>
+          <code>${esc(state.novaChave)}</code>
+          <div class="actions">${btn('📋 Copiar chave', 'copy', `data-text="${esc(state.novaChave)}"`, 'small primary')}
+          ${btn('📋 Copiar instruções para o agente', 'copy-agent-guide', '', 'small')}</div></div>` : ''}
+        ${chaves == null ? btn('Ver chaves existentes', 'load-keys', '', 'small') : chaves.length ? `<div class="table-wrap"><table class="table">
+          <thead><tr><th>Agente</th><th>Chave</th><th>Último uso</th><th></th></tr></thead><tbody>
+          ${chaves.map(c => `<tr class="${c.revogada ? 'muted' : ''}"><td>${esc(c.nome)}</td><td><code>${esc(c.prefixo)}…</code></td>
+            <td>${c.ultimo_uso ? U.timeAgo(c.ultimo_uso) : 'nunca'}</td>
+            <td>${c.revogada ? 'revogada' : btn('Revogar', 'revoke-key', `data-id="${esc(c.id)}"`, 'small danger')}</td></tr>`).join('')}
+          </tbody></table></div>` : emptyMsg('Nenhuma chave criada.')}
+        <details class="api-docs"><summary>Como o agente usa (endpoints)</summary>
+          <pre>${esc(agentGuide('SUA_CHAVE'))}</pre></details>`
+      : `<p>A API para agentes funciona no <b>modo nuvem</b> (Supabase), porque o agente precisa de um lugar na internet para gravar.
+          Configure seguindo o README e volte aqui para criar as chaves.</p>
+         <p class="muted">Enquanto isso, use “Colar de uma conversa” e “Importar agenda” ao lado — funcionam no modo local.</p>`;
+
+    return pageHead('Automação e integrações', 'Deixe o Claude, Gemini, Manus ou outro agente preencher o app por você') + `
+      <div class="grid-2">
+        ${panel('💬 Colar de uma conversa com IA', `
+          <ol class="steps">
+            <li>${btn('📋 Copiar prompt', 'copy-prompt', '', 'small primary')} e cole no Claude, Gemini ou ChatGPT — no fim de uma conversa
+              sobre seus remédios, rotina ou contas, ou junto com um e-mail/PDF de conta.</li>
+            <li>A IA responde com um bloco JSON. Copie e cole abaixo.</li>
+            <li>Confira a pré-visualização e importe.</li>
+          </ol>
+          <textarea class="full mono" rows="7" data-role="import-text" placeholder='{"remedios": [{"nome": "Losartana", "horarios": ["08:00"]}]}'>${esc(state.importTexto || '')}</textarea>
+          <div class="actions" style="margin-top:8px">${btn('Pré-visualizar', 'import-preview', '', 'primary')}</div>
+          ${previa}`)}
+        ${panel('📅 Importar agenda (Google, Outlook, Apple)', `
+          <p class="muted">No Google Agenda: <b>Configurações → Importar e exportar → Exportar</b>. Descompacte e escolha o arquivo <code>.ics</code>.
+            Importa compromissos de hoje em diante e os que se repetem (aniversários). Importar de novo atualiza sem duplicar.</p>
+          <label class="btn">📂 Escolher arquivo .ics<input type="file" accept=".ics,text/calendar" data-action="import-ics" hidden></label>
+          <p class="muted small">Para sincronizar sempre, use um agente com acesso à sua agenda (veja ao lado).</p>`)}
+        ${panel('🔑 API para agentes (Claude, Gemini, Manus, n8n, Zapier…)', apiPanel)}
+        ${panel('📤 Levar meus dados para uma IA', `
+          <p class="muted">Copie um resumo da sua rotina para perguntar ao Claude ou ao Gemini coisas como
+            “o que vence esta semana?” ou “monte um cardápio mais saudável”.</p>
+          <div class="actions">${btn('📋 Copiar resumo da rotina', 'copy-summary', '', 'small')}${btn('📋 Copiar dados (JSON)', 'copy-json', '', 'small')}</div>`)}
+      </div>
+      ${panel('🧩 Ideias de automação prontas', `<div class="ideas">
+        <div><b>📧 Contas do e-mail</b><p class="muted small">Um agente com acesso ao Gmail procura boletos, faturas e cobranças, e cadastra a conta com valor, vencimento e código de barras. Ela aparece no Painel como “para revisar”.</p></div>
+        <div><b>📅 Agenda sempre em dia</b><p class="muted small">Um agente lê o Google Agenda toda manhã e grava os compromissos da semana (id <code>gcal-&lt;id do evento&gt;</code> para não duplicar).</p></div>
+        <div><b>💊 Da consulta para o app</b><p class="muted small">Depois de conversar com o Claude sobre uma receita médica, peça para ele gerar o JSON (ou gravar direto via conector MCP).</p></div>
+        <div><b>🛒 Lista pelo WhatsApp/voz</b><p class="muted small">Via n8n, Zapier ou Make: uma mensagem “leite, pão, ovos” vira itens na lista de compras.</p></div>
+      </div><p class="muted small">Detalhes e prompts prontos no arquivo <code>docs/AUTOMACAO.md</code> do projeto.</p>`)}`;
+  }
+
+  function agentGuide(chave) {
+    const cfg = Store.config();
+    const base = `${String(cfg.supabaseUrl || 'https://SEU-PROJETO.supabase.co').replace(/\/$/, '')}/rest/v1/rpc`;
+    const kinds = Object.entries(Schema.KINDS).map(([k, d]) => `- ${k}: ${Object.entries(d.campos).map(([c, x]) => `${c}${x.obrig ? '*' : ''} (${x.tipo})`).join(', ')}`).join('\n');
+    return `API do app "Casa Organizada" (organização da casa).
+
+Cabeçalhos em todas as chamadas:
+  apikey: ${cfg.supabaseAnonKey || 'CHAVE_ANON_DO_SUPABASE'}
+  Content-Type: application/json
+
+1) Salvar/atualizar registros
+POST ${base}/agente_salvar
+{"chave": "${chave}", "registros": [
+  {"tipo": "conta", "id": "gmail-<id-da-mensagem>", "dados": {"nome": "Energia Enel", "valor": 287.45, "tipo": "unica", "data": "2026-11-10", "codigo": "8364..."}}
+]}
+- "id" é opcional; use ids estáveis (gmail-..., gcal-...) para não duplicar ao rodar de novo. Mesmo id = atualiza.
+- Itens de lista: {"tipo": "item", "dados": {"texto": "leite", "lista_nome": "Compras"}}.
+- Tudo que o agente grava aparece no Painel como "para revisar".
+
+2) Consultar (para evitar duplicados)
+POST ${base}/agente_listar
+{"chave": "${chave}", "tipo": "conta"}   (tipo e "desde" são opcionais)
+
+3) Remover
+POST ${base}/agente_remover
+{"chave": "${chave}", "tipo": "conta", "id": "..."}
+
+Tipos e campos (* = obrigatório). Datas AAAA-MM-DD, horas HH:MM, dias da semana 0=segunda…6=domingo:
+${kinds}`;
+  }
+
+  function resumoRotina() {
+    const t = U.today();
+    const linhas = [`# Rotina da casa — ${U.longDate(t)}`, ''];
+    const occ = D.billOccurrences(U.thisMonth());
+    linhas.push(`## Contas de ${U.monthLabel(U.thisMonth())}`, ...occ.map(o => `- ${U.fmtDay(o.venc)} ${o.conta.nome}: ${U.brl(o.valor)} (${o.pago ? 'paga' : D.STATUS_LABEL[D.billStatus(o)].toLowerCase()})`), '');
+    linhas.push('## Remédios', ...Store.list('remedio').filter(m => D.medActiveOn(m, t)).map(m => `- ${m.nome} ${m.dose || ''} — ${m.pessoa || ''} — ${(m.horarios || []).join(', ')} ${m.instrucoes ? `(${m.instrucoes})` : ''}`), '');
+    linhas.push('## Compromissos (30 dias)', ...D.eventsBetween(t, U.ymd(U.addDays(new Date(), 30))).map(({ date, ev }) => `- ${U.fmtDate(date)} ${ev.hora || ''} ${ev.titulo}`), '');
+    linhas.push('## Rotina de tarefas', ...Store.list('tarefa').filter(D.isRecorrente).map(x => `- ${x.titulo} — ${D.freqLabel(x)} — ${x.responsavel || ''}`), '');
+    linhas.push('## Cardápio', ...U.WD.map((d, wd) => `- ${d}: ${D.SLOTS.map(sl => D.meal(wd, sl.id)).filter(Boolean).join(' / ') || '—'}`));
+    return linhas.join('\n');
+  }
+
+  async function copiar(texto, msg = 'Copiado ✔') {
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast(msg);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      toast(msg);
+    }
+  }
+
+  // Importa registros já normalizados, mesclando com o que existe.
+  async function importarRegistros(regs, origem) {
+    let n = 0;
+    for (const { kind, data } of regs) {
+      let d = { origem, ...data, revisado: true };
+      if (kind === 'item' && !d.lista) {
+        const nome = d.lista_nome || 'Compras';
+        let l = D.listas().find(x => x.nome.toLowerCase() === nome.toLowerCase());
+        if (!l) l = await Store.put('lista', { nome, icone: nome.toLowerCase().includes('compra') ? '🛒' : '📝' });
+        d = { ...d, lista: l.id };
+        delete d.lista_nome;
+      }
+      await Store.put(kind, { ...(Store.get(kind, d.id) || {}), ...d });
+      n++;
+    }
+    return n;
+  }
+
   function imprimir() {
     const p = state.print;
     const { sheet, html } = Print.render(p.sheet, p);
@@ -362,7 +519,7 @@
       </div>`;
   }
 
-  const VIEWS = { painel, mural, contas, remedios, alimentacao, calendario, tarefas, listas, contatos, imprimir, ajustes };
+  const VIEWS = { painel, mural, contas, remedios, alimentacao, calendario, tarefas, listas, contatos, imprimir, automacao, ajustes };
 
   // ---------- Render ----------
   const currentRoute = () => {
@@ -515,6 +672,7 @@
         { name: 'categoria', label: 'Categoria', type: 'select', options: D.CATEGORIAS },
         { name: 'responsavel', label: 'Quem paga', type: 'select', options: D.responsaveis() },
         { name: 'forma', label: 'Forma de pagamento', type: 'combo', options: ['Boleto', 'Pix', 'Débito automático', 'Cartão de crédito', 'Dinheiro'] },
+        { name: 'codigo', label: 'Código de barras / Pix copia e cola', type: 'textarea' },
         { name: 'obs', label: 'Observações (código de barras, site, login…)', type: 'textarea' },
       ],
       onSave: v => Store.put('conta', { ...conta, ...v }),
@@ -723,6 +881,65 @@
     },
     'set-eu': el => { D.setEu(el.value); toast('Salvo ✔'); },
 
+    copy: el => copiar(el.dataset.text),
+    'copy-prompt': () => copiar(Schema.promptIA(D.pessoas()), 'Prompt copiado — cole no Claude ou Gemini ✔'),
+    'copy-summary': () => copiar(resumoRotina(), 'Resumo copiado ✔'),
+    'copy-json': () => copiar(JSON.stringify(Store.exportAll(), null, 2), 'Dados copiados ✔'),
+    'copy-agent-guide': () => copiar(agentGuide(state.novaChave || 'SUA_CHAVE'), 'Instruções copiadas ✔'),
+    'import-preview': () => {
+      const text = $main().querySelector('[data-role=import-text]').value;
+      state.importTexto = text;
+      try {
+        state.importacao = Schema.parseImport(text);
+        if (!state.importacao.length) throw new Error('Nenhum registro encontrado.');
+      } catch (err) {
+        state.importacao = null;
+        alert('Não consegui ler o texto: ' + err.message);
+      }
+      render(true);
+    },
+    'import-cancel': () => { state.importacao = null; render(true); },
+    'import-confirm': async () => {
+      const regs = (state.importacao || []).filter(r => !r.erros.length);
+      state.importacao = null;
+      state.importTexto = '';
+      const n = await importarRegistros(regs, 'importacao-ia');
+      render(true);
+      toast(`${n} registros importados ✔`);
+    },
+    'import-ics': async el => {
+      const file = el.files[0];
+      if (!file) return;
+      try {
+        const regs = Schema.parseICS(await file.text(), U.today());
+        if (!regs.length) return alert('Nenhum compromisso de hoje em diante encontrado no arquivo.');
+        if (!confirm(`Importar ${regs.length} compromissos?`)) return;
+        const n = await importarRegistros(regs, 'calendario-ics');
+        toast(`${n} compromissos importados ✔`);
+      } catch (err) {
+        alert('Não consegui ler o arquivo: ' + err.message);
+      } finally {
+        el.value = '';
+      }
+    },
+    'load-keys': async () => {
+      try { state.chaves = await Store.rpc('listar_chaves_api'); } catch (err) { alert(err.message); state.chaves = []; }
+      render(true);
+    },
+    'revoke-key': async el => {
+      if (!confirm('Revogar esta chave? O agente que a usa perde o acesso imediatamente.')) return;
+      await Store.rpc('revogar_chave_api', { p_id: el.dataset.id });
+      state.chaves = await Store.rpc('listar_chaves_api');
+      render(true);
+    },
+    'review-ok': el => { const o = Store.get(el.dataset.kind, el.dataset.id); Store.put(el.dataset.kind, { ...o, revisado: true }); },
+    'review-all': () => D.paraRevisar().forEach(({ kind, obj }) => Store.put(kind, { ...obj, revisado: true })),
+    'review-del': el => { if (confirm('Descartar este item?')) Store.remove(el.dataset.kind, el.dataset.id); },
+    'review-edit': el => {
+      const forms = { conta: billForm, remedio: medForm, evento: eventForm, tarefa: taskForm, contato: contactForm };
+      forms[el.dataset.kind]({ ...Store.get(el.dataset.kind, el.dataset.id), revisado: true });
+    },
+
     'sign-out': () => Store.signOut(),
     export: () => {
       const blob = new Blob([JSON.stringify(Store.exportAll(), null, 2)], { type: 'application/json' });
@@ -790,6 +1007,17 @@
         }
         render(true);
         $main().querySelector('.quick-add input')?.focus();
+        return;
+      }
+      if (form.dataset.form === 'nova-chave') {
+        e.preventDefault();
+        try {
+          state.novaChave = await Store.rpc('criar_chave_api', { p_nome: new FormData(form).get('nome') });
+          state.chaves = await Store.rpc('listar_chaves_api');
+        } catch (err) {
+          alert('Não foi possível criar a chave: ' + err.message + '\n\nVocê executou a versão mais recente do supabase/schema.sql?');
+        }
+        render(true);
         return;
       }
       if (form.dataset.form !== 'pessoas') return;

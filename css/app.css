@@ -347,6 +347,21 @@ input[type=checkbox] { width: auto; }
 .sheet .sheet-list.big li { font-size: 13pt; padding: 2.5mm 0; }
 .sheet .blank { display: inline-block; width: 70%; }
 
+/* Automação */
+.row.review .ico, .import-preview .ico { font-size: 18px; }
+.steps { padding-left: 20px; margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.mono, pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+code { background: var(--bg); padding: 1px 5px; border-radius: 5px; word-break: break-all; }
+pre { background: var(--bg); padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
+.import-preview { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.secret { background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.secret p { margin: 0; }
+.api-docs { margin-top: 10px; }
+.api-docs summary { cursor: pointer; font-weight: 600; }
+.ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.ideas p { margin: 4px 0 0; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
 @media print {
   body { background: #fff; }
   #shell, #modal, #toast { display: none !important; }

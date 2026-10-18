@@ -13,6 +13,7 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 | **Tarefas** | Tarefas únicas (com prazo) e rotinas que se repetem (todo dia, em dias da semana ou uma vez por mês), por cômodo e responsável |
 | **Listas** | Listas compartilhadas (compras, farmácia, casa…): um adiciona, o outro vê na hora no mercado; mostra quem adicionou |
 | **Contatos** | Médicos, escola, serviços da casa e números de emergência, com botão de ligar e de WhatsApp |
+| **Automação** | Importar dados de conversas com IA e do Google Agenda, chaves de API para agentes (Claude, Gemini, Manus, n8n…) e exportar um resumo da rotina para uma IA |
 | **Imprimir** | Folhas A4 prontas para deixar nos lugares certos da casa |
 | **Ajustes** | Nomes das pessoas, nome da casa, “este aparelho é de…”, backup e restauração |
 
@@ -84,7 +85,11 @@ window.APP_CONFIG = {
 - **GitHub Pages**: Settings → Pages → Branch `main` / pasta raiz. No plano gratuito do GitHub, o repositório
   precisa ser público. Os dados continuam protegidos pelo login, porque o código não guarda nenhum dado.
 
-### 4. No celular
+### 4. Automação (opcional)
+Para que agentes de IA (Claude, Gemini, Manus, n8n…) leiam e gravem no app, veja **[docs/AUTOMACAO.md](docs/AUTOMACAO.md)**.
+Se você rodou o `schema.sql` antes desta versão, **rode-o de novo**. Ele é seguro de repetir: cria só o que falta e não apaga dados.
+
+### 5. No celular
 Abra o endereço do site e use **"Adicionar à tela inicial"** (Safari ou Chrome). Ele abre como um aplicativo.
 
 ### Já usou o modo local e quer levar os dados para a nuvem?
@@ -99,11 +104,14 @@ index.html            página única
 config.js             configuração do Supabase (vazio = modo local)
 css/app.css           estilos da tela e das folhas de impressão
 js/util.js            datas, dinheiro e formatação
+js/schema.js          formato dos dados, normalização, importação (IA e .ics) e prompt para IA
 js/store.js           dados (localStorage ou Supabase + tempo real)
 js/domain.js          regras: vencimentos, doses, repetições, tarefas
 js/print.js           folhas A4 para imprimir
 js/app.js             telas, formulários e navegação
-supabase/schema.sql   tabela, segurança (RLS) e tempo real
+supabase/schema.sql   tabela, segurança (RLS), tempo real e API para agentes
+mcp/server.js         conector MCP para o Claude (sem dependências)
+docs/AUTOMACAO.md     guia de automação, endpoints e prompts prontos
 ```
 
 ## Ideias para as próximas versões

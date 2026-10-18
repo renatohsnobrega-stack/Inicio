@@ -1,0 +1,400 @@
+// Formato dos dados do app. É a referência usada pela tela, pela importação de IA,
+// pela API de agentes e pelo servidor MCP — e também quem "conserta" dados que chegam
+// de fora (ex.: "R$ 150,90", "8h", "25/10/2026", "segunda").
+const Schema = (() => {
+  const CATEGORIAS = ['Moradia', 'Água / Luz / Gás', 'Internet / Telefone', 'Cartão de crédito', 'Mercado',
+    'Saúde', 'Educação', 'Transporte', 'Seguros', 'Impostos', 'Assinaturas', 'Outros'];
+  const CATEG_CONTATO = ['Emergência', 'Saúde', 'Família', 'Escola', 'Serviços da casa', 'Trabalho', 'Outros'];
+  const SLOTS = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche', jantar: 'Jantar' };
+
+  const f = (tipo, desc, obrig = false) => ({ tipo, desc, obrig });
+  const COMUNS = {
+    origem: f('texto', 'De onde veio o dado (ex.: "gmail", "google-calendar", "claude")'),
+    revisado: f('booleano', 'false = aparece no Painel em "para revisar"'),
+  };
+  const KINDS = {
+    conta: {
+      nome: 'Contas a pagar', plural: 'contas', icone: '💰',
+      campos: {
+        nome: f('texto', 'Nome da conta (ex.: "Energia Enel")', true),
+        valor: f('número', 'Valor em reais, com ponto decimal (ex.: 150.90)'),
+        tipo: f('"mensal" | "unica"', 'mensal = repete todo mês; unica = vence uma vez só'),
+        dia: f('número 1-31', 'Dia do vencimento (contas mensais)'),
+        data: f('data AAAA-MM-DD', 'Data do vencimento (contas únicas)'),
+        inicio: f('mês AAAA-MM', 'Primeiro mês da conta mensal'),
+        fim: f('mês AAAA-MM', 'Último mês da conta mensal (vazio = sem fim)'),
+        categoria: f(CATEGORIAS.map(c => `"${c}"`).join(' | '), 'Categoria'),
+        responsavel: f('texto', 'Quem paga'),
+        forma: f('texto', 'Forma de pagamento (Boleto, Pix, Débito automático…)'),
+        codigo: f('texto', 'Linha digitável do boleto ou Pix copia e cola'),
+        obs: f('texto', 'Observações'),
+      },
+      exemplo: { nome: 'Energia Enel', valor: 287.45, tipo: 'unica', data: '2026-11-10', categoria: 'Água / Luz / Gás', forma: 'Boleto', codigo: '83640000002-8 87450...' },
+    },
+    remedio: {
+      nome: 'Remédios', plural: 'remedios', icone: '💊',
+      campos: {
+        nome: f('texto', 'Nome do remédio', true),
+        pessoa: f('texto', 'Para quem'),
+        dose: f('texto', 'Dose (ex.: "1 comprimido 50mg")'),
+        horarios: f('lista de "HH:MM"', 'Horários (ex.: ["08:00","20:00"])'),
+        instrucoes: f('texto', 'Como tomar (ex.: "em jejum")'),
+        inicio: f('data AAAA-MM-DD', 'Início do tratamento'),
+        fim: f('data AAAA-MM-DD', 'Fim do tratamento (vazio = uso contínuo)'),
+        ativo: f('booleano', 'false = suspenso'),
+      },
+      exemplo: { nome: 'Losartana', pessoa: 'Renato', dose: '1 comprimido 50mg', horarios: ['08:00', '20:00'], instrucoes: 'após o café' },
+    },
+    evento: {
+      nome: 'Compromissos', plural: 'eventos', icone: '📅',
+      campos: {
+        titulo: f('texto', 'O quê', true),
+        data: f('data AAAA-MM-DD', 'Data', true),
+        hora: f('"HH:MM"', 'Hora (opcional)'),
+        pessoa: f('texto', 'Quem vai'),
+        local: f('texto', 'Local'),
+        repete: f('"nao" | "semanal" | "mensal" | "anual"', 'Repetição (anual = aniversários)'),
+        obs: f('texto', 'Observações'),
+      },
+      exemplo: { titulo: 'Consulta cardiologista', data: '2026-11-04', hora: '14:30', pessoa: 'Renato', local: 'Clínica Coração' },
+    },
+    tarefa: {
+      nome: 'Tarefas', plural: 'tarefas', icone: '✅',
+      campos: {
+        titulo: f('texto', 'Tarefa', true),
+        tipo: f('"unica" | "diaria" | "semanal" | "mensal"', 'Frequência'),
+        data: f('data AAAA-MM-DD', 'Prazo (tarefa única)'),
+        dias: f('lista de números 0-6', 'Dias da semana (semanal). 0 = segunda … 6 = domingo'),
+        dia: f('número 1-31', 'Dia do mês (mensal)'),
+        responsavel: f('texto', 'Quem faz'),
+        local: f('texto', 'Cômodo (Cozinha, Banheiro, Lavanderia…)'),
+        obs: f('texto', 'Observações'),
+      },
+      exemplo: { titulo: 'Tirar o lixo', tipo: 'semanal', dias: [0, 2, 4], responsavel: 'Renato', local: 'Cozinha' },
+    },
+    refeicao: {
+      nome: 'Cardápio semanal', plural: 'refeicoes', icone: '🍽️',
+      campos: {
+        dia: f('número 0-6', '0 = segunda … 6 = domingo', true),
+        refeicao: f('"cafe" | "almoco" | "lanche" | "jantar"', 'Qual refeição', true),
+        texto: f('texto', 'O que comer'),
+      },
+      exemplo: { dia: 0, refeicao: 'almoco', texto: 'Arroz, feijão, frango grelhado e salada' },
+    },
+    contato: {
+      nome: 'Contatos úteis', plural: 'contatos', icone: '📞',
+      campos: {
+        nome: f('texto', 'Nome', true),
+        categoria: f(CATEG_CONTATO.map(c => `"${c}"`).join(' | '), 'Categoria'),
+        telefone: f('texto', 'Telefone'),
+        whatsapp: f('booleano', 'Tem WhatsApp'),
+        endereco: f('texto', 'Endereço'),
+        obs: f('texto', 'Observações'),
+      },
+      exemplo: { nome: 'Dra. Paula (pediatra)', categoria: 'Saúde', telefone: '(11) 98765-4321', whatsapp: true },
+    },
+    recado: {
+      nome: 'Recados do mural', plural: 'recados', icone: '📌',
+      campos: {
+        texto: f('texto', 'Recado', true),
+        autor: f('texto', 'Quem escreveu (ex.: "Claude")'),
+        fixado: f('booleano', 'Fixar no topo'),
+      },
+      exemplo: { texto: 'A fatura do cartão chegou: R$ 1.230,00, vence dia 15.', autor: 'Claude' },
+    },
+    lista: {
+      nome: 'Listas', plural: 'listas', icone: '📝',
+      campos: { nome: f('texto', 'Nome da lista', true), icone: f('emoji', 'Ícone') },
+      exemplo: { nome: 'Compras', icone: '🛒' },
+    },
+    item: {
+      nome: 'Itens de lista', plural: 'itens', icone: '🛒',
+      campos: {
+        texto: f('texto', 'Item', true),
+        lista_nome: f('texto', 'Nome da lista (ex.: "Compras"); é criada se não existir'),
+        lista: f('texto', 'Ou o id da lista'),
+        feito: f('booleano', 'Já comprado/resolvido'),
+      },
+      exemplo: { texto: '2 L de leite', lista_nome: 'Compras' },
+    },
+  };
+  const ALIASES = {
+    medicamento: 'remedio', medicamentos: 'remedio', compromisso: 'evento', compromissos: 'evento',
+    cardapio: 'refeicao', contas_a_pagar: 'conta',
+  };
+  Object.entries(KINDS).forEach(([k, v]) => { ALIASES[k] = k; ALIASES[v.plural] = k; });
+  const kindOf = name => ALIASES[strip(name).replace(/\s+/g, '_')] || null;
+  // Tipos que um agente pode criar e que pedem conferência humana no Painel.
+  const REVISAVEIS = ['conta', 'remedio', 'evento', 'tarefa', 'contato'];
+
+  // ---------- Conversões tolerantes ----------
+  const pad = U.pad;
+  function strip(s) {
+    return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  }
+  function toYmd(v) {
+    const s = String(v ?? '').trim();
+    let m;
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    if ((m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/))) {
+      return `${m[3].length === 2 ? '20' + m[3] : m[3]}-${pad(m[2])}-${pad(m[1])}`;
+    }
+    return '';
+  }
+  function toYm(v) {
+    const s = String(v ?? '').trim();
+    let m;
+    if ((m = s.match(/^(\d{4})-(\d{1,2})/))) return `${m[1]}-${pad(m[2])}`;
+    if ((m = s.match(/^(\d{1,2})[/-](\d{4})$/))) return `${m[2]}-${pad(m[1])}`;
+    return '';
+  }
+  const toBool = (v, def) => (v == null || v === '' ? def
+    : typeof v === 'boolean' ? v : !/^(false|0|nao|no|n)$/.test(strip(v)));
+  const toInt = (v, min, max) => {
+    const n = parseInt(v, 10);
+    return isNaN(n) ? '' : Math.min(max, Math.max(min, n));
+  };
+  const WD_PT = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
+  const WD_EN = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  function toWeekday(v) {
+    if (typeof v === 'number' || /^\d$/.test(String(v).trim())) return Number(v) % 7;
+    const s = strip(v).slice(0, 3);
+    const i = WD_PT.indexOf(s) >= 0 ? WD_PT.indexOf(s) : WD_EN.indexOf(s);
+    return i >= 0 ? i : null;
+  }
+  function toSlot(v) {
+    const s = strip(v);
+    if (SLOTS[s]) return s;
+    if (/cafe|breakfast|manha/.test(s)) return 'cafe';
+    if (/almoc|lunch/.test(s)) return 'almoco';
+    if (/lanch|snack|tarde/.test(s)) return 'lanche';
+    if (/jant|dinner|ceia|noite/.test(s)) return 'jantar';
+    return null;
+  }
+  function pickEnum(v, map, def) {
+    const s = strip(v);
+    for (const [re, val] of map) if (re.test(s)) return val;
+    return def;
+  }
+  // Hash curto e estável (FNV-1a) para gerar ids que evitam duplicar a mesma coisa.
+  function hash(s) {
+    let h = 0x811c9dc5;
+    for (const ch of String(s)) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(36);
+  }
+  function naturalKey(kind, o) {
+    switch (kind) {
+      case 'conta': return `${strip(o.nome)}|${o.tipo === 'unica' ? o.data : o.dia}`;
+      case 'remedio': return `${strip(o.nome)}|${strip(o.pessoa)}`;
+      case 'evento': return `${strip(o.titulo)}|${o.data}|${o.hora || ''}`;
+      case 'tarefa': return strip(o.titulo);
+      case 'contato': return strip(o.nome);
+      case 'lista': return strip(o.nome);
+      default: return null;
+    }
+  }
+
+  // Coage os campos conhecidos para o formato do app e mantém os demais (pagos, feitos…).
+  function normalize(kind, raw) {
+    const o = { ...(raw || {}) };
+    const str = (...ks) => ks.forEach(k => { if (o[k] != null && typeof o[k] !== 'string') o[k] = String(o[k]); if (typeof o[k] === 'string') o[k] = o[k].trim(); });
+    switch (kind) {
+      case 'conta':
+        str('nome', 'categoria', 'responsavel', 'forma', 'codigo', 'obs');
+        if (o.valor != null) o.valor = U.parseMoney(o.valor);
+        if (!o.data && o.vencimento) o.data = o.vencimento;
+        if (o.data) o.data = toYmd(o.data);
+        o.tipo = o.tipo ? pickEnum(o.tipo, [[/unic|uma|once|single/, 'unica']], 'mensal') : (o.data && !o.dia ? 'unica' : 'mensal');
+        if (o.tipo === 'mensal') {
+          o.dia = toInt(o.dia ?? (o.data ? o.data.slice(8) : ''), 1, 31);
+          // Conta recorrente vinda de fora começa no próximo vencimento (não nasce "atrasada").
+          if (o.inicio === undefined) {
+            o.inicio = o.data ? o.data.slice(0, 7)
+              : o.dia && o.dia < new Date().getDate() ? U.addMonths(U.thisMonth(), 1) : U.thisMonth();
+          }
+        }
+        if (o.inicio) o.inicio = toYm(o.inicio);
+        if (o.fim) o.fim = toYm(o.fim);
+        if (o.pagos && typeof o.pagos !== 'object') delete o.pagos;
+        break;
+      case 'remedio':
+        str('nome', 'pessoa', 'dose', 'instrucoes');
+        o.horarios = U.parseTimes(o.horarios || []);
+        o.ativo = toBool(o.ativo, true);
+        if (o.inicio) o.inicio = toYmd(o.inicio);
+        if (o.fim) o.fim = toYmd(o.fim);
+        break;
+      case 'evento':
+        str('titulo', 'pessoa', 'local', 'obs');
+        if (o.data) o.data = toYmd(o.data);
+        if (o.hora) o.hora = U.parseTimes([o.hora])[0] || '';
+        o.repete = pickEnum(o.repete, [[/anu|year|ano/, 'anual'], [/mens|month|mes/, 'mensal'], [/seman|week/, 'semanal']], 'nao');
+        break;
+      case 'tarefa':
+        str('titulo', 'responsavel', 'local', 'obs');
+        o.tipo = pickEnum(o.tipo, [[/diar|daily|todo dia/, 'diaria'], [/seman|week/, 'semanal'], [/mens|month/, 'mensal']], 'unica');
+        if (o.tipo === 'semanal') o.dias = [...new Set((Array.isArray(o.dias) ? o.dias : String(o.dias || '').split(/[,;\s]+/)).map(toWeekday).filter(d => d != null))].sort();
+        if (o.tipo === 'mensal') o.dia = toInt(o.dia, 1, 31);
+        if (o.data) o.data = toYmd(o.data);
+        o.feito = toBool(o.feito, false);
+        break;
+      case 'refeicao': {
+        str('texto');
+        const wd = o.dia != null ? toWeekday(o.dia) : null;
+        const slot = o.refeicao ? toSlot(o.refeicao) : null;
+        if (wd != null && slot) o.id = `${wd}-${slot}`;
+        break;
+      }
+      case 'contato':
+        str('nome', 'categoria', 'telefone', 'endereco', 'obs');
+        o.whatsapp = toBool(o.whatsapp, false);
+        if (!o.categoria) o.categoria = 'Outros';
+        break;
+      case 'recado':
+        str('texto', 'autor');
+        o.fixado = toBool(o.fixado, false);
+        if (!o.em) o.em = new Date().toISOString();
+        if (!Array.isArray(o.curtidas)) o.curtidas = [];
+        break;
+      case 'item':
+        str('texto', 'lista', 'lista_nome');
+        o.feito = toBool(o.feito, false);
+        if (!o.criadoEm) o.criadoEm = new Date().toISOString();
+        break;
+      case 'lista':
+        str('nome', 'icone');
+        if (!o.criadaEm) o.criadaEm = new Date().toISOString();
+        break;
+      default:
+        break;
+    }
+    if (o.id != null) o.id = String(o.id);
+    if (!o.id) {
+      const key = naturalKey(kind, o);
+      o.id = key ? `imp-${kind}-${hash(key)}` : U.uid();
+    }
+    return o;
+  }
+
+  function validate(kind, o) {
+    const def = KINDS[kind];
+    if (!def) return [`tipo desconhecido: ${kind}`];
+    const errs = Object.entries(def.campos).filter(([k, c]) => c.obrig && (o[k] === '' || o[k] == null)).map(([k]) => `falta "${k}"`);
+    if (kind === 'conta' && o.tipo === 'unica' && !o.data) errs.push('conta única precisa de "data"');
+    if (kind === 'conta' && o.tipo === 'mensal' && !o.dia) errs.push('conta mensal precisa de "dia"');
+    if (kind === 'refeicao' && !/^[0-6]-(cafe|almoco|lanche|jantar)$/.test(o.id)) errs.push('"dia" ou "refeicao" inválido');
+    if (kind === 'item' && !o.lista && !o.lista_nome) errs.push('informe "lista_nome"');
+    return errs;
+  }
+
+  function resumo(kind, o) {
+    switch (kind) {
+      case 'conta': return `${o.nome} — ${U.brl(o.valor)} — ${o.tipo === 'unica' ? `vence ${U.fmtDate(o.data)}` : `todo dia ${o.dia}`}`;
+      case 'remedio': return `${o.nome}${o.dose ? ` (${o.dose})` : ''} — ${o.pessoa || '—'} — ${(o.horarios || []).join(', ') || 'sem horário'}`;
+      case 'evento': return `${o.titulo} — ${U.fmtDate(o.data)}${o.hora ? ` às ${o.hora}` : ''}${o.repete && o.repete !== 'nao' ? ` (${o.repete})` : ''}`;
+      case 'tarefa': return `${o.titulo} — ${o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
+      case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}: ${o.texto || '—'}`; }
+      case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}`;
+      case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}`;
+      case 'lista': return o.nome;
+      default: return o.texto || o.nome || o.titulo || o.id;
+    }
+  }
+
+  // Aceita: [{tipo, dados}], [{kind, data}] ou {contas:[…], remedios:[…], …}; tolera ```json … ```.
+  function parseImport(text) {
+    let s = String(text || '').trim();
+    const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) s = fence[1].trim();
+    if (!/^[[{]/.test(s)) {
+      const i = s.search(/[[{]/);
+      if (i < 0) throw new Error('Não encontrei um JSON no texto colado.');
+      s = s.slice(i);
+    }
+    const json = JSON.parse(s);
+    const out = [];
+    const push = (kindName, data, id) => {
+      const kind = kindOf(kindName);
+      if (!kind) { out.push({ kind: kindName, data: data || {}, erros: [`tipo desconhecido: ${kindName}`] }); return; }
+      out.push({ kind, data: { ...(data || {}), ...(id ? { id } : {}) } });
+    };
+    if (Array.isArray(json)) {
+      json.forEach(r => push(r.tipo || r.kind, r.dados || r.data, r.id));
+    } else if (json && typeof json === 'object') {
+      if (Array.isArray(json.registros)) json.registros.forEach(r => push(r.tipo || r.kind, r.dados || r.data, r.id));
+      else Object.entries(json).forEach(([k, arr]) => (Array.isArray(arr) ? arr : [arr]).forEach(d => push(k, d)));
+    }
+    return out.map(r => {
+      if (r.erros) return r;
+      const data = normalize(r.kind, r.data);
+      return { kind: r.kind, data, erros: validate(r.kind, data) };
+    });
+  }
+
+  // Google Agenda / Outlook / Apple: arquivo .ics → compromissos (a partir de `desde`).
+  function parseICS(text, desde) {
+    const lines = String(text).replace(/\r?\n[ \t]/g, '').split(/\r?\n/);
+    const evs = [];
+    let ev = null;
+    for (const line of lines) {
+      if (line === 'BEGIN:VEVENT') ev = {};
+      else if (line === 'END:VEVENT') { if (ev) evs.push(ev); ev = null; }
+      else if (ev) {
+        const i = line.indexOf(':');
+        if (i > 0) ev[line.slice(0, i).split(';')[0].toUpperCase()] = line.slice(i + 1);
+      }
+    }
+    const unesc = s => String(s || '').replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1').trim();
+    return evs.filter(e => !e['RECURRENCE-ID'] && e.STATUS !== 'CANCELLED').map(e => {
+      const m = String(e.DTSTART || '').match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})\d{0,2}(Z)?)?/);
+      if (!m) return null;
+      let data = `${m[1]}-${m[2]}-${m[3]}`, hora = '';
+      if (m[4]) {
+        if (m[6]) {
+          const d = new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]));
+          data = U.ymd(d);
+          hora = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } else hora = `${m[4]}:${m[5]}`;
+      }
+      const freq = (String(e.RRULE || '').match(/FREQ=(\w+)/) || [])[1];
+      const repete = { YEARLY: 'anual', MONTHLY: 'mensal', WEEKLY: 'semanal' }[freq] || 'nao';
+      const titulo = unesc(e.SUMMARY) || '(sem título)';
+      const data_ = normalize('evento', {
+        id: `ics-${hash(e.UID || data + titulo)}`, titulo, data, hora, repete,
+        local: unesc(e.LOCATION), obs: unesc(e.DESCRIPTION).slice(0, 500), origem: 'calendario-ics', revisado: true,
+      });
+      return { kind: 'evento', data: data_, erros: [] };
+    }).filter(r => r && (r.data.repete !== 'nao' || r.data.data >= desde));
+  }
+
+  // Prompt para colar no Claude / Gemini / ChatGPT e receber os dados no formato do app.
+  function promptIA(pessoas = []) {
+    const blocos = Object.entries(KINDS).filter(([k]) => k !== 'lista').map(([, def]) =>
+      `"${def.plural}": ${def.nome}\n${Object.entries(def.campos).map(([c, x]) =>
+        `  - ${c}${x.obrig ? ' (obrigatório)' : ''}: ${x.tipo} — ${x.desc}`).join('\n')}`).join('\n\n');
+    const exemplo = {};
+    ['conta', 'remedio', 'evento', 'item'].forEach(k => { exemplo[KINDS[k].plural] = [KINDS[k].exemplo]; });
+    return `Quero cadastrar informações no meu app de organização da casa ("Casa Organizada").
+Com base na nossa conversa (ou no conteúdo que eu enviar a seguir), gere SOMENTE um bloco JSON no formato abaixo.
+
+Regras:
+- Hoje é ${U.today()}. Converta datas relativas ("sexta que vem") para AAAA-MM-DD.
+- Horários em "HH:MM" (24h). Valores em número com ponto decimal (150.90).
+- Dias da semana: 0 = segunda, 1 = terça … 6 = domingo.
+- Use só as chaves que tiverem dados; não invente informações que não foram ditas.${pessoas.length ? `\n- As pessoas da casa são: ${pessoas.join(', ')}.` : ''}
+
+Chaves e campos aceitos:
+
+${blocos}
+
+Exemplo de resposta:
+\`\`\`json
+${JSON.stringify(exemplo, null, 2)}
+\`\`\``;
+  }
+
+  return {
+    CATEGORIAS, CATEG_CONTATO, SLOTS, KINDS, COMUNS, REVISAVEIS,
+    kindOf, normalize, validate, resumo, parseImport, parseICS, promptIA, hash, toYmd,
+  };
+})();

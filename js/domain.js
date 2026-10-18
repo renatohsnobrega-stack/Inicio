@@ -6,14 +6,13 @@ const D = (() => {
     { id: 'lanche', nome: 'Lanche' },
     { id: 'jantar', nome: 'Jantar' },
   ];
-  const CATEGORIAS = ['Moradia', 'Água / Luz / Gás', 'Internet / Telefone', 'Cartão de crédito', 'Mercado',
-    'Saúde', 'Educação', 'Transporte', 'Seguros', 'Impostos', 'Assinaturas', 'Outros'];
+  const CATEGORIAS = Schema.CATEGORIAS;
   const LOCAIS = ['Cozinha', 'Banheiro', 'Sala', 'Quarto', 'Lavanderia', 'Área externa', 'Rua'];
   const TIPOS_TAREFA = [['unica', 'Uma vez'], ['diaria', 'Todo dia'], ['semanal', 'Dias da semana'], ['mensal', 'Todo mês']];
   const REPETE = [['nao', 'Não repete'], ['semanal', 'Toda semana'], ['mensal', 'Todo mês'], ['anual', 'Todo ano']];
 
   const LISTAS_SUGERIDAS = [['🛒', 'Compras'], ['💊', 'Farmácia'], ['🔧', 'Casa / manutenção'], ['🎁', 'Presentes e desejos']];
-  const CATEG_CONTATO = ['Emergência', 'Saúde', 'Família', 'Escola', 'Serviços da casa', 'Trabalho', 'Outros'];
+  const CATEG_CONTATO = Schema.CATEG_CONTATO;
   const CORES = ['#2f6f5e', '#b0527a', '#4a6fa5', '#b7791f', '#7a5aa8'];
 
   const config = id => Store.get('config', id) || {};
@@ -53,6 +52,10 @@ const D = (() => {
     if (d.length === 10 || d.length === 11) d = '55' + d;
     return 'https://wa.me/' + d;
   };
+
+  // Itens criados por agentes/automação que ainda não foram conferidos.
+  const paraRevisar = () => Schema.REVISAVEIS.flatMap(kind =>
+    Store.list(kind).filter(o => o.revisado === false).map(o => ({ kind, obj: o })));
 
   // ---------- Contas ----------
   function billOccurrences(month) {
@@ -175,7 +178,7 @@ const D = (() => {
   return {
     SLOTS, CATEGORIAS, LOCAIS, TIPOS_TAREFA, REPETE, STATUS_LABEL, LISTAS_SUGERIDAS, CATEG_CONTATO,
     config, pessoas, responsaveis, casaNome, eu, setEu, corDe,
-    recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
+    paraRevisar, recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
     billOccurrences, billStatus, contasAtencao,
     medActiveOn, doseKey, dosesOn,
     mealId, meal,

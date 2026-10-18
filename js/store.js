@@ -46,7 +46,12 @@ const Store = (() => {
     location.reload();
   }
 
-  const setRow = (kind, id, data) => { (cache[kind] = cache[kind] || {})[id] = data; };
+  // Todo dado que entra (tela, nuvem, agentes, importação) passa pela normalização do Schema.
+  const setRow = (kind, id, data) => {
+    const obj = Schema.normalize(kind, { ...data, id: data?.id || id });
+    (cache[kind] = cache[kind] || {})[obj.id] = obj;
+    return obj;
+  };
 
   async function loadCloud() {
     cache = {};
@@ -86,8 +91,7 @@ const Store = (() => {
   const get = (kind, id) => cache[kind]?.[id];
 
   async function put(kind, obj) {
-    obj = { ...obj, id: obj.id || U.uid() };
-    setRow(kind, obj.id, obj);
+    obj = setRow(kind, obj.id || U.uid(), obj);
     emit();
     await write(() => sb.from('registros').upsert({ kind, id: obj.id, data: obj }));
     return obj;
@@ -109,6 +113,14 @@ const Store = (() => {
     }
   }
 
+  // Funções do banco (chaves de API para agentes). Só no modo nuvem.
+  async function rpc(name, args = {}) {
+    if (!sb) throw new Error('Disponível só no modo nuvem.');
+    const { data, error } = await sb.rpc(name, args);
+    if (error) throw error;
+    return data;
+  }
+
   const exportAll = () => JSON.parse(JSON.stringify(cache));
 
   // Mescla um backup (mesmo formato do exportAll) aos dados atuais.
@@ -116,8 +128,8 @@ const Store = (() => {
     const rows = [];
     for (const [kind, items] of Object.entries(data || {})) {
       for (const [id, obj] of Object.entries(items || {})) {
-        setRow(kind, id, obj);
-        rows.push({ kind, id, data: obj });
+        const n = setRow(kind, id, obj);
+        rows.push({ kind, id: n.id, data: n });
       }
     }
     emit();
@@ -128,7 +140,8 @@ const Store = (() => {
   }
 
   return {
-    init, signIn, signOut, loadCloud, list, get, put, remove, removeMany, exportAll, importAll,
+    init, signIn, signOut, loadCloud, list, get, put, remove, removeMany, exportAll, importAll, rpc,
+    config: () => window.APP_CONFIG || {},
     mode: () => mode,
     user: () => user,
     subscribe: fn => listeners.add(fn),
