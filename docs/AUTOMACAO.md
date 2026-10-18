@@ -1,17 +1,22 @@
 # 🤖 Automação: deixar a IA preencher o app
 
-O Casa Organizada aceita dados de fora por **4 caminhos**. Do mais simples ao mais automático:
+O Casa Organizada aceita dados de fora por **5 caminhos**. Do mais simples ao mais automático:
 
 | Caminho | Precisa de | Bom para |
 |---|---|---|
 | 1. **Colar de uma conversa** | nada (funciona até no modo local) | Levar para o app o que você conversou com o Claude, Gemini ou ChatGPT (remédios, rotina, contas) |
 | 2. **Importar agenda (.ics)** | nada | Trazer de uma vez o Google Agenda, Outlook ou Apple |
+| 2b. **Sincronizar Google Agenda (script)** | modo nuvem + conta Google | Agenda sempre em dia, de hora em hora, **sem IA e sem gastar tokens** |
 | 3. **Conector MCP** | modo nuvem + Claude Desktop ou Claude Code | Falar com o Claude e ele grava direto no app |
 | 4. **API para agentes** | modo nuvem | Automações que rodam sozinhas: Claude (tarefas agendadas), Manus, Gemini, n8n, Zapier, Make |
 
 > **Segurança:** tudo que um agente grava pelos caminhos 3 e 4 aparece no **Painel** em
 > **"🤖 Adicionados automaticamente — para revisar"**, com os botões Ok, Editar e Descartar.
 > Cada agente usa uma **chave própria**, que você revoga quando quiser (Automação → API para agentes).
+
+> **Qual escolher?** Use IA só onde ela é necessária. Dados que já vêm organizados (como a agenda) vão melhor por
+> script: é de graça, instantâneo e sempre igual. A IA vale a pena para interpretar coisas soltas: e-mails de cobrança,
+> fotos de receitas, conversas.
 
 ---
 
@@ -29,12 +34,38 @@ Importar a mesma coisa de novo **atualiza o registro em vez de duplicar**.
 Google Agenda: **Configurações → Importar e exportar → Exportar**. Descompacte o arquivo e escolha o `.ics` em **Automação → Importar agenda**.
 São importados os compromissos de hoje em diante e os que se repetem (aniversários).
 
+## 2b. Sincronizar o Google Agenda automaticamente (sem IA)
+
+O arquivo [`integracoes/google-agenda.gs`](../integracoes/google-agenda.gs) é um script do Google (Apps Script),
+gratuito e sem servidor, que copia a sua agenda para o app **de hora em hora**:
+
+1. Acesse <https://script.google.com>, clique em **Novo projeto** e cole o conteúdo do arquivo.
+2. Preencha o `CONFIG` no topo: endereço do Supabase, chave anon e uma chave criada em **Automação → API para agentes**.
+   Para incluir a agenda da sua esposa, peça que ela a compartilhe com você e adicione o ID dela em `AGENDAS`.
+3. Escolha a função **instalar** e clique em ▶ **Executar**. Autorize o acesso à agenda.
+
+O script cria e atualiza os compromissos e também tira do app os que forem apagados ou mudarem de dia na agenda.
+Ele só mexe nos eventos que vieram da agenda; o que vocês criarem no próprio app fica como está.
+Para parar, execute a função **desinstalar**.
+
 ## 3. Conector MCP (Claude Desktop / Claude Code)
 
 Com o conector, você fala com o Claude e ele mesmo consulta e grava no app. Exemplos:
 *"Coloque no app que a Ana vai tomar amoxicilina 500mg de 8 em 8 horas por 7 dias, começando hoje"* ou *"o que vence esta semana?"*.
 
-Ferramentas disponíveis: `casa_formato`, `casa_listar`, `casa_salvar` e `casa_remover`.
+Ferramentas disponíveis:
+
+| Ferramenta | Para quê | Custo típico |
+|---|---|---|
+| `casa_resumo` | "Como está a semana?": contas a vencer e atrasadas, remédios de hoje (tomados ou não), compromissos, tarefas, listas e recados | ~150 tokens |
+| `casa_listar` | Achar registros, com `busca` (texto), `tipo` e `limite`; uma linha por registro, com o id | ~15 tokens por registro |
+| `casa_formato` | Campos aceitos (pode pedir só um `tipo`) | ~100 tokens por tipo |
+| `casa_salvar` | Criar ou atualizar | — |
+| `casa_remover` | Remover pelo id | — |
+
+As respostas são texto curto, não JSON: cerca de 7 vezes menos tokens do que devolver os dados completos.
+O resumo é calculado no seu computador com as mesmas regras do app, então os vencimentos e as tarefas do dia
+batem com o que aparece na tela.
 
 **Pré-requisitos:** modo nuvem configurado, Node.js 18+ no computador e uma chave criada em **Automação → API para agentes**.
 
@@ -134,6 +165,8 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 > *(cole aqui o texto de "Copiar instruções para o agente")*
 
 ### 📅 Agenda da semana (Claude com Google Agenda, Manus)
+
+Para o Google Agenda, prefira o script do item 2b: não gasta tokens. Use o prompt abaixo só se não puder usar o script.
 
 > Leia os eventos do meu Google Agenda dos próximos 14 dias e grave no app com `"tipo": "evento"`,
 > `"id": "gcal-<id do evento>"` e `"origem": "google-calendar"`. Inclua título, data, hora e local. Aniversários recorrentes: `"repete": "anual"`.

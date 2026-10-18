@@ -292,7 +292,7 @@ const Schema = (() => {
       case 'conta': return `${o.nome} — ${U.brl(o.valor)} — ${o.tipo === 'unica' ? `vence ${U.fmtDate(o.data)}` : `todo dia ${o.dia}`}`;
       case 'remedio': return `${o.nome}${o.dose ? ` (${o.dose})` : ''} — ${o.pessoa || '—'} — ${(o.horarios || []).join(', ') || 'sem horário'}`;
       case 'evento': return `${o.titulo} — ${U.fmtDate(o.data)}${o.hora ? ` às ${o.hora}` : ''}${o.repete && o.repete !== 'nao' ? ` (${o.repete})` : ''}`;
-      case 'tarefa': return `${o.titulo} — ${o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
+      case 'tarefa': return `${o.titulo} — ${{ unica: o.data ? `até ${U.fmtDate(o.data)}` : 'uma vez', diaria: 'todo dia', semanal: 'semanal', mensal: `todo dia ${o.dia}` }[o.tipo] || o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
       case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}: ${o.texto || '—'}`; }
       case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}`;
       case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}`;

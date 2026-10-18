@@ -201,6 +201,7 @@ begin
 end $$;
 
 -- POST /rest/v1/rpc/agente_listar  { "chave": "...", "tipo": "conta" (opcional), "desde": "2026-10-01" (opcional) }
+-- Sem "tipo", devolve tudo menos "dose" (remédios tomados) e "config"; esses dois vêm quando pedidos pelo tipo.
 create or replace function public.agente_listar(chave text, tipo text default null, desde timestamptz default null)
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
@@ -211,8 +212,9 @@ begin
     select jsonb_agg(jsonb_build_object('tipo', t.kind, 'id', t.id, 'dados', t.data, 'atualizado_em', t.updated_at)
                      order by t.kind, t.id)
       from public.registros t
-     where t.kind not in ('dose', 'config')
-       and (agente_listar.tipo is null or t.kind = agente_listar.tipo)
+     -- doses tomadas e configurações só vêm quando pedidas pelo tipo
+     where (case when agente_listar.tipo is null then t.kind not in ('dose', 'config')
+                 else t.kind = agente_listar.tipo end)
        and (agente_listar.desde is null or t.updated_at >= agente_listar.desde)
   ), '[]'::jsonb);
 end $$;
