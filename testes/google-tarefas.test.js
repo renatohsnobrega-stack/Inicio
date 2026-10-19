@@ -59,23 +59,24 @@ appSet('tarefa', 'a1', { titulo: 'Marcar dentista', tipo: 'unica', data: '2026-1
 appSet('tarefa', 'r1', { titulo: 'Tirar o lixo', tipo: 'semanal', dias: [0, 2, 4] });
 appSet('lista', 'l1', { nome: 'Compras', icone: '🛒' });
 appSet('lista', 'l2', { nome: 'Farmácia' });
-appSet('item', 'i1', { texto: 'Leite', lista: 'l1', feito: false });
+appSet('item', 'i1', { texto: 'Leite', lista: 'l1', feito: false, prazo: '2026-10-22' });
 appSet('item', 'i2', { texto: 'Dipirona', lista: 'l2', feito: false });
 
 sync();
 ok(gVivas('Casa').length === 1 && gVivas('Casa')[0].title === 'Marcar dentista', '1ª: tarefa avulsa do app foi para a lista "Casa" (rotina não foi)');
 ok(gVivas('Casa')[0].due === '2026-10-25T00:00:00.000Z' && gVivas('Casa')[0].notes === 'Dra. Paula', '1ª: prazo e observação foram junto');
 ok(gVivas('Compras').map(t => t.title).join() === 'Leite', '1ª: só o item da lista Compras foi para o Google');
+ok(gVivas('Compras')[0].due === '2026-10-22T00:00:00.000Z', '1ª: prazo do item de compra foi junto');
 
 gAdd('Casa', { title: 'Pagar IPVA', due: '2026-11-05T00:00:00.000Z' });
 gEdit('Casa', 'Marcar dentista', { status: 'completed', completed: '2026-10-18T13:00:00.000Z' });
-gAdd('Compras', { title: 'Pão' });
+gAdd('Compras', { title: 'Pão', due: '2026-10-20T00:00:00.000Z' });
 sync();
 const ipva = appList('tarefa').find(t => t.titulo === 'Pagar IPVA');
 ok(ipva && ipva.data === '2026-11-05' && ipva.revisado === true, '2ª: tarefa criada no Google apareceu no app, com prazo, sem cair em "para revisar"');
 ok(appGet('tarefa', 'a1').feito === true && appGet('tarefa', 'a1').feitoEm === '2026-10-18', '2ª: concluir no Google concluiu no app');
 ok(appGet('tarefa', 'a1').responsavel === 'Vanessa', '2ª: campos que só existem no app (responsável) foram preservados');
-ok(appList('item').some(i => i.texto === 'Pão' && i.lista === 'l1'), '2ª: item novo no Google entrou em Listas → Compras');
+ok(appList('item').some(i => i.texto === 'Pão' && i.lista === 'l1' && i.prazo === '2026-10-20'), '2ª: item novo no Google entrou em Listas → Compras, com prazo');
 
 const g0 = chamadasGoogle, n0 = appList('tarefa').length + appList('item').length;
 sync(); sync();

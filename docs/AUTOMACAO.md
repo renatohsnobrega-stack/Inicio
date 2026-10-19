@@ -204,7 +204,7 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 | `refeicao` | **dia** (0-6), **refeicao** (`cafe`/`almoco`/`lanche`/`jantar`), texto, pessoa (vazio = família) |
 | `contato` | **nome**, categoria, telefone, whatsapp, endereco, obs |
 | `recado` | **texto**, autor, fixado |
-| `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito |
+| `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito, prazo |
 
 ## Pierre (controle de gastos)
 

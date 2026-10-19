@@ -117,9 +117,9 @@ function resumo({ dias = 7 }) {
   out.push('', `Compromissos (${eventos.length}):`);
   eventos.forEach(({ date, ev }) => out.push(`- ${U.fmtDay(date)} ${ev.hora || ''} ${ev.titulo}${ev.pessoa ? ` (${ev.pessoa})` : ''}`));
 
-  const tarefas = D.tasksOn(hoje).filter(t => !t.feito);
-  out.push('', `Tarefas pendentes hoje (${tarefas.length}):`);
-  tarefas.forEach(t => out.push(`- ${t.tarefa.titulo}${t.tarefa.responsavel ? ` (${t.tarefa.responsavel})` : ''}`));
+  const tarefas = D.pendencias(hoje).filter(p => !p.feito && (p.faixa === 'atrasado' || p.faixa === 'hoje'));
+  out.push('', `Tarefas para hoje e atrasadas (${tarefas.length}):`);
+  tarefas.forEach(p => out.push(`- ${p.faixa === 'atrasado' ? `ATRASADA (${U.fmtDay(p.data)}) ` : ''}${p.titulo}${p.quem ? ` (${p.quem})` : ''}${p.kind === 'item' ? ` [lista ${p.lista?.nome || ''}]` : ''}`));
 
   for (const l of D.listas()) {
     const itens = D.itensDa(l.id).filter(i => !i.feito);

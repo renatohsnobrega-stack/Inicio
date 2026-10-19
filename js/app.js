@@ -11,6 +11,9 @@
     novaChave: null,  // chave de API recém-criada (mostrada uma vez)
     chaves: null,
     remPessoa: '',    // aba de Remédios ('' = todos)
+    tarPessoa: null,  // aba de Tarefas ('' = todos; null = escolher pelo dono do aparelho)
+    novaQuando: 'hoje', // prazo escolhido por último no "adicionar rápido" de tarefas
+    faixasAbertas: { atrasado: true, hoje: true, semana: true, depois: false, sem: false },
     aliPessoa: null,  // aba de Alimentação ('' = família; null = escolher pelo dono do aparelho)
     print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth(), pessoa: '' },
   };
@@ -64,11 +67,6 @@
       <span class="grow"><strong>${D.ehSuplemento(d.med) ? '🌿 ' : ''}${esc(d.med.nome)}</strong>${d.med.dose ? ` · ${esc(d.med.dose)}` : ''}
         <small>${esc([d.med.pessoa, d.med.instrucoes].filter(Boolean).join(' · '))}</small></span></label>`;
 
-  const taskRow = t => `<label class="check-row ${t.feito ? 'done' : ''}">
-      <input type="checkbox" data-action="toggle-task" data-id="${esc(t.tarefa.id)}" data-date="${t.date}" ${t.feito ? 'checked' : ''}>
-      <span class="grow"><strong>${esc(t.tarefa.titulo)}</strong>
-        <small>${esc([t.tarefa.responsavel, t.tarefa.local, D.freqLabel(t.tarefa)].filter(Boolean).join(' · '))}</small></span></label>`;
-
   const billRow = (o, extra = '') => {
     const st = D.billStatus(o);
     return `<div class="row status-${st}">
@@ -107,10 +105,46 @@
   const noteMini = r => `<div class="note-mini" style="--c:${D.corDe(r.autor)}">${r.fixado ? '📌 ' : ''}<strong>${esc(r.autor || '—')}:</strong>
       ${esc(r.texto.length > 140 ? r.texto.slice(0, 140) + '…' : r.texto)} <small class="muted">${U.timeAgo(r.em)}</small></div>`;
 
+  // "qua 21/10"
+  const diaCurto = d => `${U.WDS[U.mondayIndex(U.parseYmd(d))].toLowerCase()} ${U.fmtDay(d)}`;
+  // Selo do prazo: vermelho se venceu, laranja se é hoje, amarelo nos próximos 7 dias.
+  const prazoBadge = data => {
+    if (!data) return '';
+    const f = D.faixaDe(data);
+    const cls = { atrasado: 'atrasada', hoje: 'hoje', semana: 'proxima' }[f] || '';
+    return `<span class="badge prazo ${cls}">${f === 'atrasado' ? `venceu ${U.fmtDay(data)}` : f === 'hoje' ? 'hoje' : diaCurto(data)}</span>`;
+  };
+
   const itemRow = i => `<label class="check-row ${i.feito ? 'done' : ''}">
       <input type="checkbox" data-action="toggle-item" data-id="${esc(i.id)}" ${i.feito ? 'checked' : ''}>
       <span class="grow"><strong>${esc(i.texto)}</strong>${i.por ? `<span class="by"> · ${esc(i.por)}</span>` : ''}</span>
+      ${i.feito ? '' : prazoBadge(i.prazo)}
+      ${btn('✎', 'edit-item', `data-id="${esc(i.id)}" aria-label="Editar"`, 'small ghost')}
       ${btn('✕', 'del-item', `data-id="${esc(i.id)}" aria-label="Remover"`, 'small ghost')}</label>`;
+
+  // Uma pendência (tarefa ou item de lista com prazo), com ☆ para pôr no foco do dia.
+  const pendRow = (p, chave) => {
+    const t = U.today();
+    const foco = D.emFoco(p.obj, chave);
+    const meta = [p.kind === 'item' ? `${p.lista?.icone || '📝'} ${p.lista?.nome || 'Lista'}` : '', p.quem, p.obj.local,
+      p.recorrente ? D.freqLabel(p.obj) : p.data && p.faixa !== 'hoje' ? diaCurto(p.data) : ''].filter(Boolean).join(' · ');
+    const ref = `data-kind="${p.kind}" data-id="${esc(p.obj.id)}"`;
+    return `<div class="row pend ${p.feito ? 'done' : ''}">
+      <input type="checkbox" data-action="${p.kind === 'tarefa' ? 'toggle-task' : 'toggle-item'}" data-id="${esc(p.obj.id)}" data-date="${t}"
+        ${p.feito ? 'checked' : ''} aria-label="Concluir">
+      <span class="grow"><strong>${esc(p.titulo)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}</span>
+      ${p.feito ? '' : btn(foco ? '★' : '☆', 'toggle-foco', `${ref} data-chave="${esc(chave)}" title="${foco ? 'Tirar do foco' : 'Pôr no foco do dia'}"`, `small ghost foco ${foco ? 'on' : ''}`)}
+      ${btn('✎', p.kind === 'tarefa' ? 'edit-task' : 'edit-item', `data-id="${esc(p.obj.id)}" aria-label="Editar"`, 'small ghost')}
+    </div>`;
+  };
+  // "3 de 5 feitas hoje" com barrinha.
+  const progresso = ps => {
+    const hoje = ps.filter(p => p.faixa === 'atrasado' || p.faixa === 'hoje');
+    if (!hoje.length) return '';
+    const feitas = hoje.filter(p => p.feito).length;
+    return `<div class="progress-wrap"><small>${feitas} de ${hoje.length} feitas hoje</small>
+      <span class="progress"><i style="width:${(feitas / hoje.length * 100).toFixed(0)}%"></i></span></div>`;
+  };
 
   // ---------- Telas ----------
   function painel() {
@@ -122,8 +156,13 @@
     const atrasadas = atencao.filter(o => D.billStatus(o) === 'atrasada');
     const mes = D.billOccurrences(U.thisMonth());
     const aPagar = mes.filter(o => !o.pago).reduce((s, o) => s + o.valor, 0);
-    const tarefas = D.tasksOn(t);
-    const tarefasPend = tarefas.filter(x => !x.feito).length;
+    const eu = D.eu();
+    const pend = D.pendencias(t, eu);
+    const urgentes = pend.filter(p => p.faixa === 'atrasado' || p.faixa === 'hoje');
+    const tarefasPend = urgentes.filter(p => !p.feito).length;
+    const atrasadasTar = urgentes.filter(p => p.faixa === 'atrasado' && !p.feito).length;
+    const foco = D.focoDe(eu, t);
+    const resto = urgentes.filter(p => !D.emFoco(p.obj, eu));
     const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)));
     const recados = D.recados().slice(0, 4);
     const revisar = D.paraRevisar();
@@ -136,7 +175,7 @@
         ${stat('A pagar no mês', brl(aPagar))}
         ${stat('Contas atrasadas', atrasadas.length, atrasadas.length ? 'bad' : 'good')}
         ${stat('Remédios hoje', `${tomadas}/${doses.length}`, doses.length && tomadas === doses.length ? 'good' : '')}
-        ${stat('Tarefas pendentes', tarefasPend, tarefasPend ? '' : 'good')}
+        ${stat('Tarefas para hoje', tarefasPend, atrasadasTar ? 'bad' : tarefasPend ? '' : 'good')}
       </div>
       ${revisar.length ? panel(`🤖 Adicionados automaticamente — para revisar (${revisar.length})`, revisar.map(({ kind, obj }) => `
         <div class="row review">
@@ -149,6 +188,12 @@
       ${acabando.length ? panel(`⚠️ Estoque acabando (${acabando.length})`, acabando.map(estoqueRow).join(''),
         `<a href="#/remedios" class="more">ver remédios</a>`) : ''}
       <div class="grid-2">
+        ${panel(`🎯 Foco e tarefas de hoje${eu ? ` — ${esc(eu)}` : ''}`, progresso(pend)
+          + (foco.length ? `<h3 class="sub">Foco do dia</h3>${foco.map(p => pendRow(p, eu)).join('')}` : '')
+          + (resto.length ? `${foco.length ? '<h3 class="sub">Também para hoje</h3>' : ''}${resto.slice(0, 8).map(p => pendRow(p, eu)).join('')}`
+            + (resto.length > 8 ? `<p class="muted small">+ ${resto.length - 8} itens</p>` : '') : '')
+          + (!foco.length && !resto.length ? emptyMsg('Nada para hoje. 🎉') : !foco.length ? '<p class="muted small">Toque na ☆ para escolher até 3 coisas como foco do dia.</p>' : ''),
+          `<a href="#/tarefas" class="more">ver todas</a>`)}
         ${panel('📌 Mural', recados.length ? recados.map(noteMini).join('') : emptyMsg('Nenhum recado. Deixe um para quem chega em casa!'),
           `<a href="#/mural" class="more">escrever</a>`)}
         ${panel(compras ? `${esc(compras.icone || '🛒')} ${esc(compras.nome)} (${itens.length})` : '🛒 Listas',
@@ -162,8 +207,6 @@
         ${panel('🍽️ Cardápio de hoje', `<dl class="meals-today">${D.SLOTS.map(s =>
           `<dt>${s.nome}</dt><dd>${Print.mealLines(wd, s.id) || '<span class="muted">—</span>'}</dd>`).join('')}</dl>`,
           `<a href="#/alimentacao" class="more">editar</a>`)}
-        ${panel('✅ Tarefas de hoje', tarefas.length ? tarefas.map(taskRow).join('') : emptyMsg('Nenhuma tarefa para hoje.'),
-          `<a href="#/tarefas" class="more">ver todas</a>`)}
         ${panel('📅 Próximos 14 dias', eventos.length ? eventos.map(eventLine).join('') : emptyMsg('Nenhum compromisso.'),
           btn('+ Evento', 'new-event', `data-date="${t}"`, 'small'))}
       </div>`;
@@ -295,28 +338,55 @@
 
   function tarefas() {
     const t = U.today();
-    const hoje = D.tasksOn(t);
+    const ps = D.pessoas();
+    if (state.tarPessoa == null) state.tarPessoa = ps.includes(D.eu()) ? D.eu() : '';
+    const sel = ps.includes(state.tarPessoa) ? state.tarPessoa : '';
+    const chave = sel || D.eu();
+    const pend = D.pendencias(t, sel);
+    const grupos = U.groupBy(pend, p => p.faixa);
+    const foco = D.focoDe(chave, t);
     const all = Store.list('tarefa');
     const rotina = all.filter(D.isRecorrente).sort((a, b) => (a.local || '').localeCompare(b.local || '') || a.titulo.localeCompare(b.titulo));
-    const pend = all.filter(x => !D.isRecorrente(x) && !x.feito).sort((a, b) => (a.data || '9').localeCompare(b.data || '9'));
-    const feitas = all.filter(x => !D.isRecorrente(x) && x.feito).sort((a, b) => (b.feitoEm || '').localeCompare(a.feitoEm || '')).slice(0, 15);
-    const pendRow = x => `<div class="row ${x.data && x.data < t ? 'status-atrasada' : ''}">
-      <input type="checkbox" data-action="toggle-task" data-id="${esc(x.id)}" data-date="${t}" ${x.feito ? 'checked' : ''} aria-label="Concluir">
-      <span class="grow"><strong>${esc(x.titulo)}</strong><small>${esc([x.responsavel, x.local, D.freqLabel(x)].filter(Boolean).join(' · '))}</small></span>
-      ${btn('Editar', 'edit-task', `data-id="${esc(x.id)}"`, 'small ghost')}</div>`;
+    const feitas = all.filter(x => !D.isRecorrente(x) && x.feito && x.feitoEm !== t)
+      .sort((a, b) => (b.feitoEm || '').localeCompare(a.feitoEm || '')).slice(0, 15);
+    const feitaRow = x => `<div class="row pend done">
+      <input type="checkbox" data-action="toggle-task" data-id="${esc(x.id)}" data-date="${t}" checked aria-label="Reabrir">
+      <span class="grow"><strong>${esc(x.titulo)}</strong><small>${esc(['feita em ' + U.fmtDay(x.feitoEm || t), x.responsavel].filter(Boolean).join(' · '))}</small></span>
+      ${btn('✎', 'edit-task', `data-id="${esc(x.id)}" aria-label="Editar"`, 'small ghost')}</div>`;
+    const abertos = v => D.pendencias(t, v).filter(p => !p.feito && (p.faixa === 'atrasado' || p.faixa === 'hoje')).length;
 
-    return pageHead('Tarefas e rotina da casa', 'Tarefas únicas e rotinas que se repetem',
-      printBtn('tarefas') + btn('+ Nova tarefa', 'new-task', '', 'primary')) + `
-      <div class="grid-2">
-        ${panel('Hoje', hoje.length ? hoje.map(taskRow).join('') : emptyMsg('Nada para hoje.'))}
-        ${panel(`Pendências (${pend.length})`, pend.length ? pend.map(pendRow).join('') : emptyMsg('Sem pendências. 🎉'))}
-      </div>
-      ${panel(`Rotina (${rotina.length})`, rotina.length ? `<div class="table-wrap"><table class="table">
+    const coluna = f => {
+      const l = grupos[f.id] || [];
+      if (f.id === 'atrasado' && !l.length) return '';
+      const aberta = state.faixasAbertas[f.id];
+      const n = l.filter(p => !p.feito).length;
+      return `<section class="col faixa-${f.id}">
+        <button type="button" class="col-head" data-action="toggle-faixa" data-faixa="${f.id}" aria-expanded="${aberta}">
+          <h2>${f.nome}</h2><span class="count">${n}</span><span class="seta">${aberta ? '▾' : '▸'}</span></button>
+        ${aberta ? (l.length ? l.map(p => pendRow(p, chave)).join('') : emptyMsg(f.id === 'hoje' ? 'Nada para hoje. 🎉' : 'Nada aqui.')) : ''}
+      </section>`;
+    };
+    const quando = [['hoje', 'Hoje'], ['amanha', 'Amanhã'], ['semana', 'Em 7 dias'], ['sem', 'Sem prazo']];
+
+    return pageHead('Tarefas', 'Organizadas pelo prazo: primeiro o que venceu e o de hoje',
+      printBtn('tarefas') + btn('+ Tarefa detalhada', 'new-task', '', '')) + `
+      <form class="panel quick-task" data-form="tarefa-rapida">
+        <input name="titulo" placeholder="O que precisa ser feito?" autocomplete="off" enterkeyhint="done" aria-label="Nova tarefa">
+        <div class="quando">${quando.map(([v, l]) => `<label class="pill"><input type="radio" name="quando" value="${v}" ${state.novaQuando === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+          <input type="date" name="data" aria-label="Ou escolha a data">
+          <span class="spacer"></span><button class="btn primary" type="submit">Adicionar</button></div>
+      </form>
+      ${pessoaTabs('pick-tar-pessoa', sel, 'Todos', abertos)}
+      ${panel(`🎯 Foco do dia${chave ? ` — ${esc(chave)}` : ''}`, progresso(pend) + (foco.length
+        ? foco.map(p => pendRow(p, chave)).join('')
+        : `<p class="muted">Escolha até ${D.FOCO_MAX} coisas para hoje tocando na ☆. O resto pode esperar.</p>`))}
+      <div class="board">${D.FAIXAS.map(coluna).join('')}</div>
+      ${panel(`🔁 Rotina (${rotina.length})`, rotina.length ? `<div class="table-wrap"><table class="table">
         <thead><tr><th>Tarefa</th><th>Quando</th><th>Quem</th><th>Onde</th><th></th></tr></thead>
         <tbody>${rotina.map(x => `<tr><td><strong>${esc(x.titulo)}</strong></td><td>${esc(D.freqLabel(x))}</td>
           <td>${esc(x.responsavel)}</td><td>${esc(x.local)}</td><td>${btn('Editar', 'edit-task', `data-id="${esc(x.id)}"`, 'small ghost')}</td></tr>`).join('')}
-        </tbody></table></div>` : emptyMsg('Cadastre tarefas que se repetem: lavar roupa, tirar o lixo, regar plantas…'))}
-      ${feitas.length ? `<details class="panel"><summary>Concluídas recentemente</summary>${feitas.map(pendRow).join('')}</details>` : ''}`;
+        </tbody></table></div>` : emptyMsg('Cadastre tarefas que se repetem em “+ Tarefa detalhada”: lavar roupa, tirar o lixo, regar plantas…'))}
+      ${feitas.length ? `<details class="panel"><summary>Concluídas antes de hoje</summary>${feitas.map(feitaRow).join('')}</details>` : ''}`;
   }
 
   function mural() {
@@ -352,6 +422,7 @@
       <section class="panel">
         <form class="quick-add" data-form="item" data-lista="${esc(cur.id)}">
           <input name="texto" placeholder="Adicionar item… (ex.: 2 L de leite)" autocomplete="off" enterkeyhint="done">
+          <input type="date" name="prazo" class="prazo" aria-label="Até quando (opcional)" title="Até quando (opcional)">
           <button class="btn primary" type="submit">Adicionar</button>
         </form>
         ${pend.length ? pend.map(itemRow).join('') : emptyMsg('Nada pendente nesta lista.')}
@@ -623,6 +694,13 @@ ${kinds}`;
     scaler.style.width = `${sheet.offsetWidth * scale}px`;
   }
 
+  // Retorno imediato ao concluir; quando não sobra nada de hoje, comemora mais.
+  const VIVAS = ['Feito! 🎉', 'Mandou bem! ✨', 'Menos uma! 💪', 'Boa! ✔'];
+  function comemorar() {
+    const resta = D.pendencias(U.today(), D.eu()).filter(p => !p.feito && (p.faixa === 'atrasado' || p.faixa === 'hoje')).length;
+    toast(resta ? `${VIVAS[Math.floor(Math.random() * VIVAS.length)]} Faltam ${resta} para hoje.` : 'Tudo de hoje feito! 🏆');
+  }
+
   let toastTimer;
   function toast(msg) {
     const el = document.getElementById('toast');
@@ -876,6 +954,19 @@ ${kinds}`;
     });
   }
 
+  function itemForm(i) {
+    openForm({
+      title: 'Editar item',
+      values: i,
+      fields: [
+        { name: 'texto', label: 'Item', required: true },
+        { name: 'prazo', label: 'Até quando (opcional)', type: 'date', hint: 'Com prazo, o item aparece também em Tarefas, na coluna do dia.' },
+      ],
+      onSave: v => Store.put('item', { ...i, ...v }),
+      onDelete: () => Store.remove('item', i.id),
+    });
+  }
+
   function contactForm(c = {}) {
     openForm({
       title: c.id ? 'Editar contato' : 'Novo contato',
@@ -958,17 +1049,37 @@ ${kinds}`;
 
     'new-task': () => taskForm(),
     'edit-task': el => taskForm(Store.get('tarefa', el.dataset.id)),
-    'toggle-task': el => {
+    'toggle-task': async el => {
       const t = Store.get('tarefa', el.dataset.id);
       const date = el.dataset.date;
+      const feito = !D.taskDone(t, date);
       if (D.isRecorrente(t)) {
         const limite = U.ymd(U.addDays(new Date(), -120));
         const feitos = Object.fromEntries(Object.entries(t.feitos || {}).filter(([d]) => d >= limite));
         if (feitos[date]) delete feitos[date]; else feitos[date] = true;
-        Store.put('tarefa', { ...t, feitos });
+        await Store.put('tarefa', { ...t, feitos });
       } else {
-        Store.put('tarefa', { ...t, feito: !t.feito, feitoEm: t.feito ? null : date });
+        await Store.put('tarefa', { ...t, feito, feitoEm: feito ? date : null });
       }
+      if (feito) comemorar();
+    },
+    'pick-tar-pessoa': el => { state.tarPessoa = el.dataset.pessoa; render(true); },
+    'toggle-faixa': el => { const f = el.dataset.faixa; state.faixasAbertas[f] = !state.faixasAbertas[f]; render(true); },
+    'toggle-foco': el => {
+      const { kind, id } = el.dataset;
+      const chave = el.dataset.chave || 'casa';
+      const o = Store.get(kind, id);
+      const t = U.today();
+      // Guarda só o foco de hoje de cada pessoa (as datas antigas saem).
+      const foco = Object.fromEntries(Object.entries(o.foco || {}).filter(([, d]) => d === t));
+      if (foco[chave] === t) delete foco[chave];
+      else {
+        if (D.focoDe(el.dataset.chave, t).filter(p => !p.feito).length >= D.FOCO_MAX) {
+          return toast(`O foco tem no máximo ${D.FOCO_MAX} itens. Conclua ou tire um antes.`);
+        }
+        foco[chave] = t;
+      }
+      Store.put(kind, { ...o, foco });
     },
 
     'pick-ali-pessoa': el => { state.aliPessoa = el.dataset.pessoa; render(true); },
@@ -1003,10 +1114,12 @@ ${kinds}`;
       render(true);
     },
     'pick-list': el => { state.lista = el.dataset.id; render(true); },
-    'toggle-item': el => {
+    'toggle-item': async el => {
       const i = Store.get('item', el.dataset.id);
-      Store.put('item', { ...i, feito: !i.feito });
+      await Store.put('item', { ...i, feito: !i.feito, feitoEm: i.feito ? null : U.today() });
+      if (!i.feito && i.prazo) comemorar();
     },
+    'edit-item': (el, e) => { e.preventDefault(); itemForm(Store.get('item', el.dataset.id)); },
     'del-item': (el, e) => { e.preventDefault(); Store.remove('item', el.dataset.id); },
     'clear-done': el => {
       const ids = D.itensDa(el.dataset.lista).filter(i => i.feito).map(i => i.id);
@@ -1144,11 +1257,28 @@ ${kinds}`;
         e.preventDefault();
         const input = form.querySelector('input[name=texto]');
         const textos = input.value.split(/\n|;/).map(t => t.trim()).filter(Boolean);
+        const prazo = form.querySelector('input[name=prazo]')?.value || '';
         for (const texto of textos) {
-          await Store.put('item', { lista: form.dataset.lista, texto, feito: false, por: D.eu(), criadoEm: new Date().toISOString() });
+          await Store.put('item', { lista: form.dataset.lista, texto, prazo, feito: false, por: D.eu(), criadoEm: new Date().toISOString() });
         }
         render(true);
         $main().querySelector('.quick-add input')?.focus();
+        return;
+      }
+      if (form.dataset.form === 'tarefa-rapida') {
+        e.preventDefault();
+        const f = new FormData(form);
+        const titulo = String(f.get('titulo') || '').trim();
+        if (!titulo) return;
+        const quando = String(f.get('quando') || 'hoje');
+        const dias = { hoje: 0, amanha: 1, semana: 7 }[quando];
+        const data = String(f.get('data') || '') || (dias == null ? '' : U.ymd(U.addDays(new Date(), dias)));
+        state.novaQuando = quando;
+        const sel = D.pessoas().includes(state.tarPessoa) ? state.tarPessoa : '';
+        await Store.put('tarefa', { titulo, tipo: 'unica', data, responsavel: sel, feito: false });
+        render(true);
+        toast(`Adicionada: ${D.FAIXAS.find(x => x.id === D.faixaDe(data)).nome.toLowerCase()} ✔`);
+        $main().querySelector('.quick-task input[name=titulo]')?.focus();
         return;
       }
       if (form.dataset.form === 'nova-chave') {

@@ -136,8 +136,10 @@ const Print = (() => {
   function tarefas({ week }) {
     const days = weekDays(week);
     const rotina = Store.list('tarefa').filter(t => D.isRecorrente(t) && days.some(d => D.taskApplies(t, d)));
-    const pend = Store.list('tarefa').filter(t => !D.isRecorrente(t) && !t.feito && (!t.data || t.data <= days[6]))
-      .sort((a, b) => (a.data || '9').localeCompare(b.data || '9'));
+    const pend = [
+      ...Store.list('tarefa').filter(t => !D.isRecorrente(t) && !t.feito && (!t.data || t.data <= days[6])),
+      ...Store.list('item').filter(i => i.prazo && !i.feito && i.prazo <= days[6]).map(i => ({ titulo: i.texto, data: i.prazo })),
+    ].sort((a, b) => (a.data || '9').localeCompare(b.data || '9'));
     let html = head('Rotina da semana', `${U.fmtDate(days[0])} a ${U.fmtDate(days[6])} — marque ao concluir`);
     if (rotina.length) {
       const porLocal = U.groupBy(rotina, t => t.local || 'Geral');
@@ -163,7 +165,7 @@ const Print = (() => {
     if (!l) return head('Lista de compras', '') + empty('Nenhuma lista criada ainda.');
     const itens = D.itensDa(l.id).filter(i => !i.feito);
     return head(`${l.icone || ''} ${l.nome}`.trim(), `Atualizada em ${U.fmtDate(U.today())}`) + `
-      <ul class="sheet-list cols big">${itens.map(i => `<li>${BOX}${esc(i.texto)}</li>`).join('')}
+      <ul class="sheet-list cols big">${itens.map(i => `<li>${BOX}${esc(i.texto)}${i.prazo ? ` <small>até ${U.fmtDay(i.prazo)}</small>` : ''}</li>`).join('')}
         ${[...Array(Math.max(8, 30 - itens.length))].map(() => `<li>${BOX}<span class="blank"></span></li>`).join('')}</ul>`;
   }
 
