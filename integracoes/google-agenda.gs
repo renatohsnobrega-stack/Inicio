@@ -11,6 +11,7 @@
  * recorrente vira um compromisso no dia certo). Se um evento for apagado ou mudar de dia
  * na agenda, o app é corrigido na próxima sincronização. Nada é apagado fora do período
  * sincronizado e nenhum compromisso criado no próprio app é alterado.
+ * Aniversários do Google (dos Contatos) ficam de fora: o app já tem os seus, nos contatos.
  */
 const CONFIG = {
   SUPABASE_URL: 'https://SEU-PROJETO.supabase.co',
@@ -21,6 +22,7 @@ const CONFIG = {
   AGENDAS: ['primary'],
   DIAS: 60,          // quantos dias à frente sincronizar
   PESSOA: 'Ambos',   // quem aparece como responsável no app
+  ANIVERSARIOS: false, // true para trazer também os aniversários do Google
 };
 
 const PREFIXO = 'gcal-';
@@ -39,6 +41,7 @@ function sincronizarAgenda() {
     const agenda = idAgenda === 'primary' ? CalendarApp.getDefaultCalendar() : CalendarApp.getCalendarById(idAgenda);
     if (!agenda) { console.warn('Agenda não encontrada: ' + idAgenda); return; }
     agenda.getEvents(inicio, fim).forEach(ev => {
+      if (!CONFIG.ANIVERSARIOS && ehAniversario(ev)) return;
       const data = fmt(ev.getStartTime(), 'yyyy-MM-dd');
       // Repetições de um mesmo evento têm o mesmo id: o dia entra no id do app.
       const id = PREFIXO + ev.getId().replace(/@.*$/, '').replace(/[^\w-]/g, '').slice(0, 60) + '-' + data;
@@ -77,6 +80,15 @@ function sincronizarAgenda() {
     }
   });
   console.log('Agenda sincronizada: ' + registros.length + ' compromissos, ' + removidos + ' removidos.');
+}
+
+// Aniversário que o Google cria a partir dos Contatos (tipo "birthday" do evento).
+function ehAniversario(ev) {
+  try {
+    return ev.getEventType() === CalendarApp.EventType.BIRTHDAY;
+  } catch (e) {
+    return false; // versão do Apps Script sem tipo de evento: trata como compromisso comum
+  }
 }
 
 function chamar(funcao, corpo) {

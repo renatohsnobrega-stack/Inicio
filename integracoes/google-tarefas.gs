@@ -1,8 +1,9 @@
 /**
  * Casa Organizada — sincroniza o Google Tarefas com o app, nos dois sentidos, sem IA.
  *
- * Duas listas do Google Tarefas ficam espelhadas no app:
- *  - "Casa"    ⇄ Tarefas avulsas do app (as de "Uma vez"; rotinas que se repetem ficam só no app)
+ * Listas do Google Tarefas espelhadas no app:
+ *  - "Casa" e "Minhas tarefas" ⇄ Tarefas avulsas do app (as de "Uma vez"; rotinas que se repetem
+ *    ficam só no app). Cada tarefa fica na lista de onde veio; as criadas no app vão para a primeira.
  *  - "Compras" ⇄ Listas → Compras do app (com o prazo do item na data do Google)
  * Criar, editar, concluir ou apagar num lado reflete no outro a cada 15 minutos.
  *
@@ -19,7 +20,9 @@ const CONFIG = {
   SUPABASE_URL: 'https://SEU-PROJETO.supabase.co',
   ANON_KEY: 'sua chave publishable/anon do Supabase',
   CHAVE: 'casa_... (chave criada no app)',
-  LISTA_TAREFAS: 'Casa',      // nome da lista no Google Tarefas ('' para não sincronizar)
+  // Listas do Google Tarefas ligadas às tarefas do app ([] para não sincronizar).
+  // A primeira recebe as tarefas criadas no próprio app.
+  LISTAS_TAREFAS: ['Casa', 'Minhas tarefas'],
   LISTA_COMPRAS: 'Compras',   // nome da lista no Google Tarefas ('' para não sincronizar)
   LISTA_COMPRAS_APP: 'Compras', // nome da lista no app
 };
@@ -30,7 +33,7 @@ function sincronizarTarefas() {
   const trava = LockService.getScriptLock();
   if (!trava.tryLock(30000)) return; // outra sincronização em andamento
   try {
-    if (CONFIG.LISTA_TAREFAS) sincronizarPar(parTarefas());
+    listasTarefas().forEach((nome, i) => sincronizarPar(parTarefas(nome, i === 0)));
     if (CONFIG.LISTA_COMPRAS) sincronizarPar(parCompras());
   } finally {
     trava.releaseLock();
@@ -38,16 +41,29 @@ function sincronizarTarefas() {
 }
 
 // ---------- Como cada lado é lido e escrito ----------
-function parTarefas() {
+function listasTarefas() {
+  const l = CONFIG.LISTAS_TAREFAS != null ? CONFIG.LISTAS_TAREFAS : CONFIG.LISTA_TAREFAS; // LISTA_TAREFAS: versão antiga
+  return (Array.isArray(l) ? l : [l]).filter(Boolean);
+}
+
+// Em qual lista do Google fica a tarefa do app: a gravada nela (lista_google), ou a primeira.
+function listaDaTarefa(d) {
+  const nomes = listasTarefas();
+  const n = String(d.lista_google || '').toLowerCase();
+  return nomes.find(x => x.toLowerCase() === n) || nomes[0];
+}
+
+function parTarefas(listaGoogle, principal) {
   return {
-    nome: 'tarefas',
-    listaGoogle: CONFIG.LISTA_TAREFAS,
+    // A primeira lista mantém o nome antigo para não perder o estado já gravado.
+    nome: principal ? 'tarefas' : 'tarefas:' + listaGoogle.toLowerCase(),
+    listaGoogle,
     tipo: 'tarefa',
-    doApp: () => listarApp('tarefa').filter(r => (r.dados.tipo || 'unica') === 'unica'),
+    doApp: () => listarApp('tarefa').filter(r => (r.dados.tipo || 'unica') === 'unica' && listaDaTarefa(r.dados) === listaGoogle),
     paraApp: (g, id) => ({
       tipo: 'tarefa', id,
       dados: {
-        titulo: g.title, tipo: 'unica', obs: g.notes || '',
+        titulo: g.title, tipo: 'unica', obs: g.notes || '', lista_google: listaGoogle,
         data: g.due ? g.due.slice(0, 10) : '',
         feito: g.status === 'completed',
         feitoEm: g.status === 'completed' ? (g.completed || new Date().toISOString()).slice(0, 10) : null,
@@ -167,7 +183,10 @@ function sincronizarPar(par) {
 function listaDoGoogle(nome) {
   const listas = Tasks.Tasklists.list({ maxResults: 100 }).items || [];
   const achada = listas.find(l => l.title.toLowerCase() === nome.toLowerCase());
-  return (achada || Tasks.Tasklists.insert({ title: nome })).id;
+  if (achada) return achada.id;
+  // A lista padrão do Google ("Minhas tarefas" / "My Tasks") pode ter outro nome conforme o idioma.
+  if (/^(minhas tarefas|my tasks)$/i.test(nome)) return Tasks.Tasklists.get('@default').id;
+  return Tasks.Tasklists.insert({ title: nome }).id;
 }
 
 function tarefasDoGoogle(listaId) {
