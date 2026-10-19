@@ -53,3 +53,33 @@ await q(db, comoMembro, `select public.revogar_chave_api($1)`, [id]);
 ok(/chave inválida/.test(await anonErr(`select public.agente_listar($1)`, [pierre])), 'chave do Pierre revogada para de funcionar');
 ok(/permission denied/.test(await anonErr(`select public._chave('x')`)), 'função interna _chave fechada para anônimos');
 ok((await anon(`select count(*)::int n from registros`))[0].n === 0, 'anônimo continua sem ler a tabela direto (RLS)');
+
+// ---------- Dados dos filhos: só chaves "Total + filhos" ----------
+const [{ k: manus }] = await q(db, comoMembro, `select public.criar_chave_api('Manus', null, true, true) k`);
+ok(/só com acesso total/.test(await erro(db, comoMembro, `select public.criar_chave_api('x', array['conta'], false, true)`)), 'filhos com chave restrita: recusado');
+const filhos = [
+  { tipo: 'crianca', id: 'antonio', dados: { nome: 'Antônio', nascimento: '2026-03-10' } },
+  { tipo: 'marco', dados: { crianca: 'antonio', marco: 'senta', s: 'P', em: '2026-10-19' } },
+  { tipo: 'medida', dados: { crianca: 'antonio', data: '2026-10-19', peso: 8.4 } },
+  { tipo: 'historia', dados: { crianca: 'antonio', data: '2026-08-02', tipo: 'Doença', titulo: 'Resfriado' } },
+];
+const [{ r: rf }] = await anon(`select public.agente_salvar($1, $2::jsonb) r`, [manus, JSON.stringify(filhos)]);
+ok(rf.ok && rf.salvos.find(x => x.tipo === 'marco').id === 'antonio-senta', 'Manus (Total + filhos) grava criança, marco, medida e história; marco ganha id "antonio-senta"');
+const [{ l: lm }] = await anon(`select public.agente_listar($1) l`, [manus]);
+ok(['crianca', 'marco', 'medida', 'historia'].every(t => lm.some(x => x.tipo === t)) && lm.some(x => x.tipo === 'conta'), 'Manus enxerga os dados dos filhos e o resto');
+await anon(`select public.agente_salvar($1, '[{"tipo":"marco","dados":{"crianca":"antonio","marco":"senta","s":"A"}}]'::jsonb)`, [manus]);
+const [{ data: mk }] = await q(db, '', `select data from registros where kind='marco' and id='antonio-senta'`);
+ok(mk.s === 'A' && mk.em === '2026-10-19', 'Manus altera o marco (mesmo id = atualiza)');
+const [{ id: hid }] = await q(db, '', `select id from registros where kind='historia'`);
+ok((await anon(`select public.agente_remover($1, 'historia', $2) r`, [manus, hid]))[0].r.removidos === 1, 'Manus remove registro da história');
+ok(/precisa de "id"/.test(await anonErr(`select public.agente_salvar($1, '[{"tipo":"crianca","dados":{"nome":"X"}}]'::jsonb)`, [manus])), 'criança sem id: erro claro');
+ok(/precisa de "crianca"/.test(await anonErr(`select public.agente_salvar($1, '[{"tipo":"medida","dados":{"peso":8}}]'::jsonb)`, [manus])), 'medida sem criança: erro claro');
+ok(/"P", "A" ou "NV"/.test(await anonErr(`select public.agente_salvar($1, '[{"tipo":"marco","dados":{"crianca":"antonio","marco":"senta","s":"sim"}}]'::jsonb)`, [manus])), 'marco com status inválido: erro claro');
+
+const [{ l: lt }] = await anon(`select public.agente_listar($1) l`, [total]);
+ok(!lt.some(x => ['crianca', 'marco', 'medida'].includes(x.tipo)) && lt.some(x => x.tipo === 'remedio'), 'chave Total comum NÃO vê os dados dos filhos (e continua vendo o resto)');
+ok(/dados dos filhos/.test(await anonErr(`select public.agente_listar($1, 'medida')`, [total])), 'chave Total comum pedindo medidas: recusado');
+ok(/dados dos filhos/.test(await anonErr(`select public.agente_salvar($1, '[{"tipo":"medida","dados":{"crianca":"antonio","peso":9}}]'::jsonb)`, [total])), 'chave Total comum gravando medida: recusado');
+ok(/dados dos filhos/.test(await anonErr(`select public.agente_remover($1, 'crianca', 'antonio')`, [total])), 'chave Total comum apagando criança: recusado');
+const ch2 = await q(db, comoMembro, `select nome, filhos from public.listar_chaves_api()`);
+ok(ch2.find(c => c.nome === 'Manus').filhos === true && ch2.find(c => c.nome === 'Claude').filhos === false, 'lista de chaves mostra quem acessa os filhos');

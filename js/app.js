@@ -193,8 +193,8 @@
       </div>
       ${revisar.length ? panel(`🤖 Adicionados automaticamente — para revisar (${revisar.length})`, revisar.map(({ kind, obj }) => `
         <div class="row review">
-          <span class="ico">${Schema.KINDS[kind].icone}</span>
-          <span class="grow"><strong>${esc(Schema.resumo(kind, obj))}</strong><small>${esc(Schema.KINDS[kind].nome)} · via ${esc(obj.origem || 'agente')}</small></span>
+          <span class="ico">${Schema.info(kind).icone}</span>
+          <span class="grow"><strong>${esc(Schema.resumo(kind, obj))}</strong><small>${esc(Schema.info(kind).nome)} · via ${esc(obj.origem || 'agente')}</small></span>
           ${btn('✔ Ok', 'review-ok', `data-kind="${kind}" data-id="${esc(obj.id)}"`, 'small primary')}
           ${btn('Editar', 'review-edit', `data-kind="${kind}" data-id="${esc(obj.id)}"`, 'small')}
           ${btn('✕', 'review-del', `data-kind="${kind}" data-id="${esc(obj.id)}" aria-label="Descartar"`, 'small ghost')}
@@ -614,10 +614,12 @@
     const chaves = state.chaves;
     const apiPanel = cloud ? `
         <p class="muted">Crie uma chave para cada agente (ex.: “Claude – e-mails”, “Pierre”). Se algo sair do controle, revogue a chave e pronto.
-          Para serviços de terceiros, prefira <b>“Só contas a pagar”</b>: a chave não enxerga remédios, recados nem agenda e não apaga nada.</p>
+          Para serviços de terceiros, prefira <b>“Só contas a pagar”</b>: a chave não enxerga remédios, recados nem agenda e não apaga nada.
+          Os dados dos filhos (nascimento, marcos, medidas e história médica) só aparecem para chaves <b>“Total + filhos”</b>.</p>
         <form class="quick-add key-form" data-form="nova-chave"><input name="nome" placeholder="Nome do agente (ex.: Pierre)" aria-label="Nome do agente">
           <select name="escopo" aria-label="Acesso da chave">
-            <option value="total">Acesso total</option>
+            <option value="total">Acesso total (sem os dados dos filhos)</option>
+            <option value="filhos">Total + filhos (tudo, inclusive os dados dos filhos)</option>
             <option value="contas">Só contas a pagar (sem apagar)</option>
           </select>
           <button class="btn primary" type="submit">Criar chave</button></form>
@@ -628,7 +630,7 @@
         ${chaves == null ? btn('Ver chaves existentes', 'load-keys', '', 'small') : chaves.length ? `<div class="table-wrap"><table class="table">
           <thead><tr><th>Agente</th><th>Acesso</th><th>Chave</th><th>Último uso</th><th></th></tr></thead><tbody>
           ${chaves.map(c => `<tr class="${c.revogada ? 'muted' : ''}"><td>${esc(c.nome)}</td>
-            <td>${c.tipos ? `Só ${esc(c.tipos.map(t => Schema.KINDS[t]?.nome || t).join(', ').toLowerCase())}${c.pode_remover === false ? ', sem apagar' : ''}` : 'Total'}</td>
+            <td>${c.tipos ? `Só ${esc(c.tipos.map(t => Schema.KINDS[t]?.nome || t).join(', ').toLowerCase())}${c.pode_remover === false ? ', sem apagar' : ''}` : c.filhos ? 'Total + filhos' : 'Total'}</td>
             <td><code>${esc(c.prefixo)}…</code></td>
             <td>${c.ultimo_uso ? U.timeAgo(c.ultimo_uso) : 'nunca'}</td>
             <td>${c.revogada ? 'revogada' : btn('Revogar', 'revoke-key', `data-id="${esc(c.id)}"`, 'small danger')}</td></tr>`).join('')}
@@ -674,7 +676,17 @@
     const cfg = Store.config();
     const base = `${String(cfg.supabaseUrl || 'https://SEU-PROJETO.supabase.co').replace(/\/$/, '')}/rest/v1/rpc`;
     const restrita = state.novaChaveEscopo === 'contas';
-    const kinds = Object.entries(Schema.KINDS).filter(([k]) => !restrita || k === 'conta').map(([k, d]) => `- ${k}: ${Object.entries(d.campos).map(([c, x]) => `${c}${x.obrig ? '*' : ''} (${x.tipo})`).join(', ')}`).join('\n');
+    const comFilhos = state.novaChaveEscopo === 'filhos';
+    const linha = ([k, d]) => `- ${k}: ${Object.entries(d.campos).map(([c, x]) => `${c}${x.obrig ? '*' : ''} (${x.tipo})`).join(', ')}`;
+    const kinds = Object.entries(Schema.KINDS).filter(([k]) => !restrita || k === 'conta').map(linha).join('\n');
+    const filhos = !comFilhos ? '' : `
+
+Dados dos filhos (esta chave tem acesso). Filhos da casa: ${D.filhos().map(n => `${n} (id "${D.criancaId(n)}")`).join(', ') || '—'}.
+- crianca: use "id" = id do filho (ex.: "${D.criancaId(D.filhos()[0] || 'antonio')}"); grava os dados de nascimento.
+- marco: o id é "<crianca>-<marco>" (calculado se omitido). Ids dos marcos (Caderneta da Criança, MS 2024), por faixa de idade em meses:
+${Caderneta.FAIXAS.map(f => `  ${f.ini}-${f.fim}: ${f.marcos.map(m => `${m.id} (${m.nome})`).join('; ')}`).join('\n')}
+- medida e historia: sempre com "crianca"; aparecem no Painel para revisão.
+${Object.entries(Schema.KINDS_FILHOS).map(linha).join('\n')}`;
     return `API do app "Casa Organizada" (organização da casa).
 
 Cabeçalhos em todas as chamadas:
@@ -703,7 +715,7 @@ POST ${base}/agente_remover
 {"chave": "${chave}", "tipo": "conta", "id": "..."}
 ${restrita ? '\nESTA CHAVE SÓ ACESSA CONTAS A PAGAR ("tipo": "conta") E NÃO PODE REMOVER.\n' : ''}
 Tipos e campos (* = obrigatório). Datas AAAA-MM-DD, horas HH:MM, dias da semana 0=segunda…6=domingo:
-${kinds}`;
+${kinds}${filhos}`;
   }
 
   function resumoRotina() {
@@ -1418,7 +1430,7 @@ ${kinds}`;
     'review-all': () => D.paraRevisar().forEach(({ kind, obj }) => Store.put(kind, { ...obj, revisado: true })),
     'review-del': el => { if (confirm('Descartar este item?')) Store.remove(el.dataset.kind, el.dataset.id); },
     'review-edit': el => {
-      const forms = { conta: billForm, remedio: medForm, evento: eventForm, tarefa: taskForm, contato: contactForm };
+      const forms = { conta: billForm, remedio: medForm, evento: eventForm, tarefa: taskForm, contato: contactForm, medida: medidaForm, historia: historiaForm };
       forms[el.dataset.kind]({ ...Store.get(el.dataset.kind, el.dataset.id), revisado: true });
     },
 
@@ -1512,11 +1524,12 @@ ${kinds}`;
         e.preventDefault();
         try {
           const f = new FormData(form);
-          const soContas = f.get('escopo') === 'contas';
+          const escopo = f.get('escopo');
+          const soContas = escopo === 'contas';
           state.novaChave = await Store.rpc('criar_chave_api', {
-            p_nome: f.get('nome'), p_tipos: soContas ? ['conta'] : null, p_pode_remover: !soContas,
+            p_nome: f.get('nome'), p_tipos: soContas ? ['conta'] : null, p_pode_remover: !soContas, p_filhos: escopo === 'filhos',
           });
-          state.novaChaveEscopo = soContas ? 'contas' : 'total';
+          state.novaChaveEscopo = escopo;
           state.chaves = await Store.rpc('listar_chaves_api');
         } catch (err) {
           alert('Não foi possível criar a chave: ' + err.message + '\n\nVocê executou a versão mais recente do supabase/schema.sql?');

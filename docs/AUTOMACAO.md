@@ -169,10 +169,12 @@ Ao criar a chave (**Automação → API para agentes**), escolha o acesso:
 
 | Acesso | Pode | Não pode |
 |---|---|---|
-| **Total** | tudo acima | — |
+| **Total** | tudo acima | ver ou mexer nos dados dos filhos |
+| **Total + filhos** | tudo, inclusive dados de nascimento, marcos, medidas e história médica dos filhos | — |
 | **Só contas a pagar (sem apagar)** | listar, criar e editar contas; marcar como paga | ver remédios, recados, agenda, contatos e listas; remover qualquer coisa |
 
-Use **"Só contas a pagar"** para serviços de terceiros, como o Pierre. Tentativas fora do escopo são recusadas pelo banco
+Use **"Só contas a pagar"** para serviços de terceiros, como o Pierre. Use **"Total + filhos"** só para o agente que
+deve cuidar também dos dados dos filhos (ex.: a Manus); as chaves dos scripts do Google e do MCP não precisam disso. Tentativas fora do escopo são recusadas pelo banco
 (erro `esta chave só tem acesso a: conta`), não só pela tela.
 
 ```bash
@@ -205,6 +207,15 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 | `contato` | **nome**, aniversario (`AAAA-MM-DD`, ou `MM-DD` sem o ano), categoria, telefone, whatsapp, endereco, obs |
 | `recado` | **texto**, autor, fixado |
 | `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito, prazo |
+
+Só com chave **Total + filhos**:
+
+| tipo | campos principais |
+|---|---|
+| `crianca` | **id** (nome sem acento, ex.: `antonio`), **nome**, nascimento, ig_semanas, ig_dias, peso_nascer (g), comprimento_nascer (cm), pc_nascer (cm), tipo_sanguineo, alergias, obs |
+| `marco` | **crianca**, **marco** (id do marco da Caderneta, listado em "Copiar instruções para o agente"), **s** (`P`/`A`/`NV`), em |
+| `medida` | **crianca**, **data**, peso (kg), comprimento (cm), pc (cm), obs |
+| `historia` | **crianca**, **data**, **titulo**, tipo (`Consulta`, `Doença`, `Exame`, `Vacina`, `Internação`, `Cirurgia`, `Alergia`, `Outro`), texto |
 
 ## Pierre (controle de gastos)
 

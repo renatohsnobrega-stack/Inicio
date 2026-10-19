@@ -88,6 +88,12 @@ alter table public.chaves_api enable row level security; -- sem políticas: só 
 -- Escopo da chave: tipos = null → todos os tipos; ex.: {conta} → só contas a pagar.
 alter table public.chaves_api add column if not exists tipos text[];
 alter table public.chaves_api add column if not exists pode_remover boolean not null default true;
+-- Dados dos filhos (nascimento, marcos, medidas, história médica): só chaves criadas com "Total + filhos".
+alter table public.chaves_api add column if not exists filhos boolean not null default false;
+
+create or replace function public._tipos_filhos()
+returns text[] language sql immutable
+as $$ select array['crianca','marco','medida','historia'] $$;
 
 create or replace function public._hash_chave(p text)
 returns text language sql immutable
@@ -118,6 +124,9 @@ begin
   if v.tipos is not null and not (p_kind = any (v.tipos)) then
     raise exception 'esta chave só tem acesso a: %', array_to_string(v.tipos, ', ') using errcode = '42501';
   end if;
+  if p_kind = any (public._tipos_filhos()) and not v.filhos then
+    raise exception 'esta chave não tem acesso aos dados dos filhos' using errcode = '42501';
+  end if;
 end $$;
 
 create or replace function public._chave_ok(p_chave text)
@@ -133,8 +142,11 @@ end $$;
 
 -- Gerenciamento das chaves (só vocês, logados no app)
 -- p_tipos: null = acesso a tudo; ex.: array['conta'] = só contas a pagar.
+-- p_filhos: true = também os dados dos filhos (só para chave de acesso total).
 drop function if exists public.criar_chave_api(text);
-create or replace function public.criar_chave_api(p_nome text, p_tipos text[] default null, p_pode_remover boolean default true)
+drop function if exists public.criar_chave_api(text, text[], boolean);
+create or replace function public.criar_chave_api(p_nome text, p_tipos text[] default null, p_pode_remover boolean default true,
+                                                  p_filhos boolean default false)
 returns text language plpgsql security definer
 set search_path = public, extensions
 as $$
@@ -148,21 +160,24 @@ begin
     raise exception 'tipos inválidos (use: %)', array_to_string(v_validos, ', ');
   end if;
   v_chave := 'casa_' || encode(extensions.gen_random_bytes(24), 'hex');
-  insert into public.chaves_api (nome, hash, prefixo, tipos, pode_remover)
+  if coalesce(p_filhos, false) and p_tipos is not null then
+    raise exception 'dados dos filhos só com acesso total';
+  end if;
+  insert into public.chaves_api (nome, hash, prefixo, tipos, pode_remover, filhos)
   values (coalesce(nullif(trim(p_nome), ''), 'Agente'), public._hash_chave(v_chave), left(v_chave, 13),
-          p_tipos, coalesce(p_pode_remover, true));
+          p_tipos, coalesce(p_pode_remover, true), coalesce(p_filhos, false));
   return v_chave; -- mostrada uma única vez
 end $$;
 
 drop function if exists public.listar_chaves_api();
 create or replace function public.listar_chaves_api()
 returns table (id uuid, nome text, prefixo text, criada_em timestamptz, ultimo_uso timestamptz, revogada boolean,
-               tipos text[], pode_remover boolean)
+               tipos text[], pode_remover boolean, filhos boolean)
 language plpgsql security definer set search_path = public
 as $$
 begin
   if not public.is_membro() then raise exception 'acesso negado'; end if;
-  return query select c.id, c.nome, c.prefixo, c.criada_em, c.ultimo_uso, c.revogada, c.tipos, c.pode_remover
+  return query select c.id, c.nome, c.prefixo, c.criada_em, c.ultimo_uso, c.revogada, c.tipos, c.pode_remover, c.filhos
                  from public.chaves_api c order by c.criada_em desc;
 end $$;
 
@@ -189,7 +204,8 @@ declare
   v_data  jsonb;
   v_lista text;
   v_out   jsonb := '[]'::jsonb;
-  v_kinds text[] := array['conta','remedio','evento','tarefa','refeicao','recado','lista','item','contato'];
+  v_kinds text[] := array['conta','remedio','evento','tarefa','refeicao','recado','lista','item','contato']
+                     || public._tipos_filhos();
   v_c     public.chaves_api := public._chave(chave);
 begin
   if jsonb_typeof(registros) = 'object' then registros := jsonb_build_array(registros); end if;
@@ -204,6 +220,16 @@ begin
     end if;
     perform public._chave_permite(v_c, v_kind);
     if jsonb_typeof(v_data) <> 'object' then raise exception '"dados" deve ser um objeto'; end if;
+    -- Filhos: a criança tem id fixo (nome sem acento, ex.: "antonio"); os demais apontam para ela em "crianca".
+    if v_kind = 'crianca' and coalesce(nullif(r->>'id', ''), nullif(v_data->>'id', '')) is null then
+      raise exception 'crianca precisa de "id" (nome sem acento, em minúsculas, ex.: antonio)';
+    end if;
+    if v_kind in ('marco', 'medida', 'historia') and coalesce(v_data->>'crianca', '') = '' then
+      raise exception '% precisa de "crianca" (id da criança, ex.: antonio)', v_kind;
+    end if;
+    if v_kind = 'marco' and (coalesce(v_data->>'marco', '') = '' or coalesce(v_data->>'s', '') not in ('P', 'A', 'NV')) then
+      raise exception 'marco precisa de "marco" (id do marco) e "s" ("P", "A" ou "NV")';
+    end if;
 
     -- Item de lista: aceita o nome da lista e cria a lista se precisar.
     if v_kind = 'item' and coalesce(v_data->>'lista', '') = '' and coalesce(v_data->>'lista_nome', '') <> '' then
@@ -225,6 +251,7 @@ begin
       when 'tarefa'   then 'auto-' || md5(lower(coalesce(v_data->>'titulo', '')))
       when 'contato'  then 'auto-' || md5(lower(coalesce(v_data->>'nome', '')))
       when 'refeicao' then coalesce(nullif(v_data->>'dia', ''), '?') || '-' || coalesce(nullif(v_data->>'refeicao', ''), '?')
+      when 'marco'    then (v_data->>'crianca') || '-' || (v_data->>'marco')
       else gen_random_uuid()::text end);
 
     v_data := jsonb_build_object('origem', 'agente', 'revisado', false, 'criadoEm', now())
@@ -257,6 +284,7 @@ begin
                  else t.kind = agente_listar.tipo end)
        and (agente_listar.desde is null or t.updated_at >= agente_listar.desde)
        and (v_c.tipos is null or t.kind = any (v_c.tipos))
+       and (v_c.filhos or not (t.kind = any (public._tipos_filhos())))
   ), '[]'::jsonb);
 end $$;
 
@@ -306,10 +334,11 @@ revoke all on function public._hash_chave(text) from public, anon, authenticated
 revoke all on function public._chave(text) from public, anon, authenticated;
 revoke all on function public._chave_permite(public.chaves_api, text) from public, anon, authenticated;
 revoke all on function public._chave_ok(text) from public, anon, authenticated;
-revoke all on function public.criar_chave_api(text, text[], boolean) from public, anon;
+revoke all on function public._tipos_filhos() from public, anon, authenticated;
+revoke all on function public.criar_chave_api(text, text[], boolean, boolean) from public, anon;
 revoke all on function public.listar_chaves_api() from public, anon;
 revoke all on function public.revogar_chave_api(uuid) from public, anon;
-grant execute on function public.criar_chave_api(text, text[], boolean), public.listar_chaves_api(),
+grant execute on function public.criar_chave_api(text, text[], boolean, boolean), public.listar_chaves_api(),
   public.revogar_chave_api(uuid) to authenticated;
 grant execute on function public.agente_salvar(text, jsonb), public.agente_listar(text, text, timestamptz),
   public.agente_remover(text, text, text), public.agente_pagar(text, text, text, date, numeric) to anon, authenticated;
