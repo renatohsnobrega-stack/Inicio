@@ -85,46 +85,84 @@ create table if not exists public.chaves_api (
   revogada   boolean     not null default false
 );
 alter table public.chaves_api enable row level security; -- sem políticas: só pelas funções abaixo
+-- Escopo da chave: tipos = null → todos os tipos; ex.: {conta} → só contas a pagar.
+alter table public.chaves_api add column if not exists tipos text[];
+alter table public.chaves_api add column if not exists pode_remover boolean not null default true;
 
 create or replace function public._hash_chave(p text)
 returns text language sql immutable
 set search_path = public, extensions
 as $$ select encode(extensions.digest(coalesce(p, ''), 'sha256'), 'hex') $$;
 
+-- Devolve a chave (com o escopo) se for válida; null se não existir ou estiver revogada.
+create or replace function public._chave(p_chave text)
+returns public.chaves_api language plpgsql security definer
+set search_path = public, extensions
+as $$
+declare v public.chaves_api;
+begin
+  select c.* into v from public.chaves_api c
+   where c.hash = public._hash_chave(p_chave) and not c.revogada;
+  if v.id is null then
+    raise exception 'chave inválida ou revogada' using errcode = '28000';
+  end if;
+  update public.chaves_api set ultimo_uso = now() where id = v.id;
+  return v;
+end $$;
+
+-- Garante que a chave pode usar o tipo pedido.
+create or replace function public._chave_permite(v public.chaves_api, p_kind text)
+returns void language plpgsql immutable
+as $$
+begin
+  if v.tipos is not null and not (p_kind = any (v.tipos)) then
+    raise exception 'esta chave só tem acesso a: %', array_to_string(v.tipos, ', ') using errcode = '42501';
+  end if;
+end $$;
+
 create or replace function public._chave_ok(p_chave text)
 returns boolean language plpgsql security definer
 set search_path = public, extensions
 as $$
-declare v_id uuid;
 begin
-  select c.id into v_id from public.chaves_api c
-   where c.hash = public._hash_chave(p_chave) and not c.revogada;
-  if v_id is null then return false; end if;
-  update public.chaves_api set ultimo_uso = now() where id = v_id;
+  perform public._chave(p_chave);
   return true;
+exception when sqlstate '28000' then
+  return false;
 end $$;
 
 -- Gerenciamento das chaves (só vocês, logados no app)
-create or replace function public.criar_chave_api(p_nome text)
+-- p_tipos: null = acesso a tudo; ex.: array['conta'] = só contas a pagar.
+drop function if exists public.criar_chave_api(text);
+create or replace function public.criar_chave_api(p_nome text, p_tipos text[] default null, p_pode_remover boolean default true)
 returns text language plpgsql security definer
 set search_path = public, extensions
 as $$
-declare v_chave text;
+declare
+  v_chave text;
+  v_validos text[] := array['conta','remedio','evento','tarefa','refeicao','recado','lista','item','contato'];
 begin
   if not public.is_membro() then raise exception 'acesso negado'; end if;
+  if p_tipos is not null and cardinality(p_tipos) = 0 then p_tipos := null; end if;
+  if p_tipos is not null and not (p_tipos <@ v_validos) then
+    raise exception 'tipos inválidos (use: %)', array_to_string(v_validos, ', ');
+  end if;
   v_chave := 'casa_' || encode(extensions.gen_random_bytes(24), 'hex');
-  insert into public.chaves_api (nome, hash, prefixo)
-  values (coalesce(nullif(trim(p_nome), ''), 'Agente'), public._hash_chave(v_chave), left(v_chave, 13));
+  insert into public.chaves_api (nome, hash, prefixo, tipos, pode_remover)
+  values (coalesce(nullif(trim(p_nome), ''), 'Agente'), public._hash_chave(v_chave), left(v_chave, 13),
+          p_tipos, coalesce(p_pode_remover, true));
   return v_chave; -- mostrada uma única vez
 end $$;
 
+drop function if exists public.listar_chaves_api();
 create or replace function public.listar_chaves_api()
-returns table (id uuid, nome text, prefixo text, criada_em timestamptz, ultimo_uso timestamptz, revogada boolean)
+returns table (id uuid, nome text, prefixo text, criada_em timestamptz, ultimo_uso timestamptz, revogada boolean,
+               tipos text[], pode_remover boolean)
 language plpgsql security definer set search_path = public
 as $$
 begin
   if not public.is_membro() then raise exception 'acesso negado'; end if;
-  return query select c.id, c.nome, c.prefixo, c.criada_em, c.ultimo_uso, c.revogada
+  return query select c.id, c.nome, c.prefixo, c.criada_em, c.ultimo_uso, c.revogada, c.tipos, c.pode_remover
                  from public.chaves_api c order by c.criada_em desc;
 end $$;
 
@@ -152,8 +190,8 @@ declare
   v_lista text;
   v_out   jsonb := '[]'::jsonb;
   v_kinds text[] := array['conta','remedio','evento','tarefa','refeicao','recado','lista','item','contato'];
+  v_c     public.chaves_api := public._chave(chave);
 begin
-  if not public._chave_ok(chave) then raise exception 'chave inválida ou revogada' using errcode = '28000'; end if;
   if jsonb_typeof(registros) = 'object' then registros := jsonb_build_array(registros); end if;
   if jsonb_typeof(registros) is distinct from 'array' then raise exception '"registros" deve ser uma lista'; end if;
   if jsonb_array_length(registros) > 500 then raise exception 'máximo de 500 registros por chamada'; end if;
@@ -164,6 +202,7 @@ begin
     if v_kind is null or not (v_kind = any (v_kinds)) then
       raise exception 'tipo inválido: % (use: %)', coalesce(v_kind, '(vazio)'), array_to_string(v_kinds, ', ');
     end if;
+    perform public._chave_permite(v_c, v_kind);
     if jsonb_typeof(v_data) <> 'object' then raise exception '"dados" deve ser um objeto'; end if;
 
     -- Item de lista: aceita o nome da lista e cria a lista se precisar.
@@ -206,8 +245,9 @@ create or replace function public.agente_listar(chave text, tipo text default nu
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
 as $$
+declare v_c public.chaves_api := public._chave(chave);
 begin
-  if not public._chave_ok(chave) then raise exception 'chave inválida ou revogada' using errcode = '28000'; end if;
+  if agente_listar.tipo is not null then perform public._chave_permite(v_c, agente_listar.tipo); end if;
   return coalesce((
     select jsonb_agg(jsonb_build_object('tipo', t.kind, 'id', t.id, 'dados', t.data, 'atualizado_em', t.updated_at)
                      order by t.kind, t.id)
@@ -216,6 +256,7 @@ begin
      where (case when agente_listar.tipo is null then t.kind not in ('dose', 'config')
                  else t.kind = agente_listar.tipo end)
        and (agente_listar.desde is null or t.updated_at >= agente_listar.desde)
+       and (v_c.tipos is null or t.kind = any (v_c.tipos))
   ), '[]'::jsonb);
 end $$;
 
@@ -224,20 +265,54 @@ create or replace function public.agente_remover(chave text, tipo text, id text)
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
 as $$
-declare n int;
+declare
+  n   int;
+  v_c public.chaves_api := public._chave(chave);
 begin
-  if not public._chave_ok(chave) then raise exception 'chave inválida ou revogada' using errcode = '28000'; end if;
+  perform public._chave_permite(v_c, agente_remover.tipo);
+  if not v_c.pode_remover then raise exception 'esta chave não pode remover registros' using errcode = '42501'; end if;
   delete from public.registros t where t.kind = agente_remover.tipo and t.id = agente_remover.id;
   get diagnostics n = row_count;
   return jsonb_build_object('ok', true, 'removidos', n);
 end $$;
 
+-- POST /rest/v1/rpc/agente_pagar  { "chave": "...", "id": "<id da conta>", "mes": "2026-10", "data": "2026-10-09", "valor": 287.45 }
+-- Marca a conta como paga naquele mês (o mês do vencimento). "data" e "valor" são opcionais
+-- (padrão: hoje e o valor cadastrado). Não mexe nos pagamentos de outros meses.
+create or replace function public.agente_pagar(chave text, id text, mes text, data date default null, valor numeric default null)
+returns jsonb language plpgsql security definer
+set search_path = public, extensions
+as $$
+declare
+  v_c public.chaves_api := public._chave(chave);
+  n   int;
+begin
+  perform public._chave_permite(v_c, 'conta');
+  if mes is null or mes !~ '^\d{4}-(0[1-9]|1[0-2])$' then raise exception '"mes" deve ser AAAA-MM'; end if;
+  update public.registros t
+     set data = t.data || jsonb_build_object('pagos',
+           coalesce(t.data->'pagos', '{}'::jsonb) || jsonb_build_object(agente_pagar.mes, jsonb_build_object(
+             'data', to_char(coalesce(agente_pagar.data, current_date), 'YYYY-MM-DD'),
+             'valor', coalesce(agente_pagar.valor, (t.data->>'valor')::numeric, 0),
+             'por', 'agente')))
+   where t.kind = 'conta' and t.id = agente_pagar.id;
+  get diagnostics n = row_count;
+  if n = 0 then raise exception 'conta não encontrada: %', agente_pagar.id; end if;
+  return jsonb_build_object('ok', true, 'id', agente_pagar.id, 'mes', agente_pagar.mes);
+end $$;
+
 -- Permissões: funções internas fechadas; API dos agentes aberta só para quem tem a chave.
 revoke all on function public._hash_chave(text) from public, anon, authenticated;
+revoke all on function public._chave(text) from public, anon, authenticated;
+revoke all on function public._chave_permite(public.chaves_api, text) from public, anon, authenticated;
 revoke all on function public._chave_ok(text) from public, anon, authenticated;
-revoke all on function public.criar_chave_api(text) from public, anon;
+revoke all on function public.criar_chave_api(text, text[], boolean) from public, anon;
 revoke all on function public.listar_chaves_api() from public, anon;
 revoke all on function public.revogar_chave_api(uuid) from public, anon;
-grant execute on function public.criar_chave_api(text), public.listar_chaves_api(), public.revogar_chave_api(uuid) to authenticated;
+grant execute on function public.criar_chave_api(text, text[], boolean), public.listar_chaves_api(),
+  public.revogar_chave_api(uuid) to authenticated;
 grant execute on function public.agente_salvar(text, jsonb), public.agente_listar(text, text, timestamptz),
-  public.agente_remover(text, text, text) to anon, authenticated;
+  public.agente_remover(text, text, text), public.agente_pagar(text, text, text, date, numeric) to anon, authenticated;
+
+-- Avisa a API do Supabase que as funções mudaram.
+notify pgrst, 'reload schema';
