@@ -47,17 +47,23 @@ gratuito e sem servidor, que copia a sua agenda para o app **de hora em hora**:
 
 O script cria e atualiza os compromissos e também tira do app os que forem apagados ou mudarem de dia na agenda.
 Ele só mexe nos eventos que vieram da agenda; o que vocês criarem no próprio app fica como está.
+Os aniversários que o Google cria a partir dos Contatos ficam de fora, porque o app já mostra os aniversários dos contatos dele.
+Para trazê-los também, use `ANIVERSARIOS: true` no `CONFIG`.
 Para parar, execute a função **desinstalar**.
 
 ## 2c. Google Tarefas e lista de compras, nos dois sentidos (sem IA)
 
-O arquivo [`integracoes/google-tarefas.gs`](../integracoes/google-tarefas.gs) espelha duas listas do Google Tarefas no app,
+O arquivo [`integracoes/google-tarefas.gs`](../integracoes/google-tarefas.gs) espelha listas do Google Tarefas no app,
 a cada 15 minutos:
 
 | No Google Tarefas | No app |
 |---|---|
-| Lista **Casa** | Tarefas avulsas ("Uma vez") |
+| Listas **Casa** e **Minhas tarefas** | Tarefas avulsas ("Uma vez") |
 | Lista **Compras** | Listas → **Compras** |
+
+Cada tarefa continua na lista do Google de onde veio (o app guarda isso no campo `lista_google`). As tarefas criadas no
+próprio app vão para a primeira lista de `LISTAS_TAREFAS` (Casa). "Minhas tarefas" é a lista padrão do Google, encontrada
+mesmo que a conta esteja em outro idioma ("My Tasks").
 
 Criar, editar, concluir, reabrir ou apagar num lado aparece no outro. "Excluir tarefas concluídas" no Google também tira
 os itens do app. Se a mesma tarefa mudar nos dois lados entre duas sincronizações, vale a alteração mais recente.

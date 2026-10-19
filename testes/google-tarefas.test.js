@@ -28,7 +28,7 @@ const appList = tipo => [...db.values()].filter(r => r.kind === tipo).map(r => r
 // ---- Google Tarefas ----
 const listas = []; const tarefas = {}; let seq = 0; let chamadasGoogle = 0;
 const Tasks = {
-  Tasklists: { list: () => ({ items: listas }), insert: l => { const n = { id: 'L' + (++seq), title: l.title }; listas.push(n); tarefas[n.id] = []; return n; } },
+  Tasklists: { list: () => ({ items: listas }), get: id => (id === '@default' ? listas[0] : listas.find(l => l.id === id)), insert: l => { const n = { id: 'L' + (++seq), title: l.title }; listas.push(n); tarefas[n.id] = []; return n; } },
   Tasks: {
     list: (lid) => ({ items: tarefas[lid].map(t => ({ ...t })) }),
     insert: (t, lid) => { chamadasGoogle++; const n = { id: 'T' + (++seq), status: 'needsAction', ...limpa(t), updated: agora() }; tarefas[lid].push(n); return n; },
@@ -41,6 +41,10 @@ const gList = nome => tarefas[listas.find(l => l.title === nome).id];
 const gVivas = nome => gList(nome).filter(t => !t.deleted && !t.hidden);
 const gAdd = (nome, t) => Tasks.Tasks.insert(t, listas.find(l => l.title === nome).id);
 const gEdit = (nome, title, mud) => { const x = gList(nome).find(t => t.title === title && !t.deleted); Object.assign(x, mud, { updated: agora() }); };
+
+// Toda conta do Google já tem a lista padrão (em inglês aqui, para testar o nome trocado pelo idioma).
+Tasks.Tasklists.insert({ title: 'My Tasks' });
+gAdd('My Tasks', { title: 'Ligar para o contador', due: '2026-10-28T00:00:00.000Z' });
 
 const props = {};
 const ctx = vm.createContext({
@@ -64,6 +68,9 @@ appSet('item', 'i2', { texto: 'Dipirona', lista: 'l2', feito: false });
 
 sync();
 ok(gVivas('Casa').length === 1 && gVivas('Casa')[0].title === 'Marcar dentista', '1ª: tarefa avulsa do app foi para a lista "Casa" (rotina não foi)');
+ok(gVivas('My Tasks').length === 1 && listas.filter(l => /minhas|my tasks/i.test(l.title)).length === 1, '1ª: "Minhas tarefas" usou a lista padrão do Google (sem criar outra) e não recebeu as tarefas do app');
+const contador = appList('tarefa').find(t => t.titulo === 'Ligar para o contador');
+ok(contador && contador.lista_google === 'Minhas tarefas' && contador.data === '2026-10-28', '1ª: tarefa de "Minhas tarefas" entrou no app, marcada com a lista de origem');
 ok(gVivas('Casa')[0].due === '2026-10-25T00:00:00.000Z' && gVivas('Casa')[0].notes === 'Dra. Paula', '1ª: prazo e observação foram junto');
 ok(gVivas('Compras').map(t => t.title).join() === 'Leite', '1ª: só o item da lista Compras foi para o Google');
 ok(gVivas('Compras')[0].due === '2026-10-22T00:00:00.000Z', '1ª: prazo do item de compra foi junto');
@@ -113,3 +120,20 @@ gAdd('Casa', { title: 'Renovar CNH' });
 appSet('tarefa', 'a9', { titulo: 'renovar cnh', tipo: 'unica', feito: false });
 sync();
 ok(gVivas('Casa').filter(t => t.title.toLowerCase() === 'renovar cnh').length === 1, '9ª: mesma tarefa criada nos dois lados antes de sincronizar virou uma só');
+
+// ---- Lista "Minhas tarefas" ----
+appSet('tarefa', contador.id, { ...appGet('tarefa', contador.id), titulo: 'Ligar para o contador (IR)', responsavel: 'Renato' }); // edição no app ({ ...t, ...v })
+appSet('tarefa', 'a10', { titulo: 'Comprar presente', tipo: 'unica', feito: false });
+sync();
+ok(gVivas('My Tasks').map(t => t.title).join() === 'Ligar para o contador (IR)', '10ª: editar no app atualizou a tarefa na própria lista "Minhas tarefas"');
+ok(gVivas('Casa').some(t => t.title === 'Comprar presente') && !gVivas('My Tasks').some(t => t.title === 'Comprar presente'), '10ª: tarefa nova do app foi só para "Casa"');
+
+gEdit('My Tasks', 'Ligar para o contador (IR)', { status: 'completed', completed: '2026-10-19T10:00:00.000Z' });
+gAdd('My Tasks', { title: 'Revisar seguro' });
+sync();
+ok(appGet('tarefa', contador.id).feito === true && appGet('tarefa', contador.id).responsavel === 'Renato', '11ª: concluir em "Minhas tarefas" concluiu no app, sem perder o responsável');
+ok(appList('tarefa').some(t => t.titulo === 'Revisar seguro' && t.lista_google === 'Minhas tarefas'), '11ª: tarefa nova em "Minhas tarefas" entrou no app');
+
+const gM = chamadasGoogle, nM = appList('tarefa').length;
+sync();
+ok(chamadasGoogle === gM && appList('tarefa').length === nM && gVivas('Casa').length + gVivas('My Tasks').length === nM - 1, '12ª: sem mudanças: nada escrito, nada duplicado entre as listas');
