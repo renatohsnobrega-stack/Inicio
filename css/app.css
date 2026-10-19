@@ -424,3 +424,19 @@ h3.sub { margin: 10px 0 2px; font-size: 12px; letter-spacing: .04em; text-transf
 details.todas { margin-top: 12px; }
 details.todas > summary { cursor: pointer; font-weight: 600; }
 .muted-row { opacity: .6; }
+
+/* Curvas de crescimento */
+svg.curva { width: 100%; height: auto; display: block; margin: 8px 0; }
+svg.curva text { font-size: 11px; fill: var(--muted); }
+svg.curva text.z { font-weight: 700; font-size: 11px; }
+svg.curva .grade { stroke: rgba(0, 0, 0, .07); }
+svg.curva .grade.ano { stroke: rgba(0, 0, 0, .18); }
+svg.curva .medida { stroke: #1d3557; stroke-width: 1.6; }
+svg.curva .ponto { fill: #1d3557; stroke: #fff; stroke-width: 1.5; }
+.classe { border-radius: 8px; padding: 8px 12px; margin: 4px 0 8px; background: var(--good-soft); }
+.classe.atencao { background: var(--warn-soft); }
+.classe.alerta { background: #fbe3e1; }
+.classe small { display: block; color: var(--muted); }
+td small.z { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+td small.z.atencao { color: var(--warn); }
+td small.z.alerta { color: #b03a2e; }

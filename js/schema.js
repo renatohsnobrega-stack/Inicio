@@ -133,6 +133,7 @@ const Schema = (() => {
       campos: {
         nome: f('texto', 'Nome do filho (igual ao de Ajustes)', true),
         nascimento: f('data AAAA-MM-DD', 'Data de nascimento'),
+        sexo: f('"M" | "F"', 'Sexo (usado nas curvas da OMS)'),
         ig_semanas: f('número', 'Idade gestacional ao nascer, em semanas'),
         ig_dias: f('número 0-6', 'Dias além das semanas'),
         peso_nascer: f('número', 'Peso ao nascer, em gramas'),
@@ -364,6 +365,7 @@ const Schema = (() => {
       case 'crianca':
         str('nome', 'tipo_sanguineo', 'alergias', 'obs');
         if (o.nascimento) o.nascimento = toYmd(o.nascimento);
+        if (o.sexo) o.sexo = pickEnum(o.sexo, [[/^(f|menina|fem|girl)/, 'F'], [/^(m|menino|masc|boy)/, 'M']], '');
         ['ig_semanas', 'ig_dias', 'peso_nascer', 'comprimento_nascer', 'pc_nascer'].forEach(k => { if (k in o) o[k] = toQtd(o[k]); });
         break;
       case 'marco':

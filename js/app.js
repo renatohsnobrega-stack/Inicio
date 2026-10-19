@@ -15,6 +15,7 @@
     novaQuando: 'hoje', // prazo escolhido por último no "adicionar rápido" de tarefas
     faixasAbertas: { atrasado: true, hoje: true, semana: true, depois: false, sem: false },
     filho: '',        // aba da página Filhos
+    curva: 'peso',    // curva da OMS mostrada (peso, comprimento, pc)
     aliPessoa: null,  // aba de Alimentação ('' = família; null = escolher pelo dono do aparelho)
     print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth(), pessoa: '' },
   };
@@ -505,6 +506,62 @@
   const idadeCurta = i => (!i ? '—' : i.meses < 24 ? `${i.meses}m ${i.dias}d` : `${Math.floor(i.meses / 12)}a ${i.meses % 12}m`);
   const num = (v, casas = 1) => String(Math.round(Number(v) * 10 ** casas) / 10 ** casas).replace('.', ',');
 
+  // Gráfico de crescimento (SVG): linhas de escore-z −3, −2, 0, +2 e +3 da OMS, como na Caderneta, e as medidas.
+  const LINHAS_Z = [[-3, '#c0392b'], [-2, '#d68910'], [0, '#2f6f5e'], [2, '#d68910'], [3, '#c0392b']];
+  function graficoCrescimento(c, ind, medidas) {
+    const pts = medidas.map(m => ({ m, id: D.idadeDias(c, m.data), v: Number(m[ind]) }))
+      .filter(x => x.id && !x.id.antesDoTermo && x.v > 0 && x.id.dias <= Crescimento.DIAS_MAX);
+    const hoje = D.idadeDias(c, U.today());
+    const ultimo = Math.max(hoje ? hoje.dias : 0, ...pts.map(x => x.id.dias));
+    const meses = Math.min(60, ultimo / 30.4375 <= 21 ? 24 : Math.ceil((ultimo / 30.4375 + 3) / 6) * 6);
+    const ate = Math.round(meses * 30.4375);
+    const linhas = LINHAS_Z.map(([z, cor]) => ({ z, cor, pts: Crescimento.curva(ind, c.sexo, z, ate, meses > 24 ? 14 : 7) }));
+    const vals = [...linhas.flatMap(l => l.pts.map(p => p[1])), ...pts.map(x => x.v)];
+    const passoY = { peso: meses > 24 ? 2 : 1, comprimento: 5, pc: 2 }[ind];
+    const yMin = Math.floor(Math.min(...vals) / passoY) * passoY, yMax = Math.ceil(Math.max(...vals) / passoY) * passoY;
+    const W = 640, H = 380, l = 44, r = 14, t = 12, b = 36;
+    const X = d => l + (d / ate) * (W - l - r), Y = v => t + (1 - (v - yMin) / (yMax - yMin)) * (H - t - b);
+    const passoX = meses <= 24 ? 2 : 6;
+    const gx = [...Array(meses / passoX + 1)].map((_, i) => i * passoX);
+    const gy = [...Array(Math.round((yMax - yMin) / passoY) + 1)].map((_, i) => yMin + i * passoY);
+    const rotX = mm => (mm === 0 ? '0' : mm % 12 === 0 ? `${mm / 12}a` : `${mm}m`);
+    const un = Crescimento.INDICADORES[ind].unidade;
+    return `<svg class="curva" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(Crescimento.INDICADORES[ind].nome)}">
+      ${gy.map(v => `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" class="grade"/><text x="${l - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+      ${gx.map(mm => `<line y1="${t}" y2="${H - b}" x1="${X(mm * 30.4375)}" x2="${X(mm * 30.4375)}" class="grade ${mm % 12 === 0 ? 'ano' : ''}"/><text x="${X(mm * 30.4375)}" y="${H - b + 16}" text-anchor="middle">${rotX(mm)}</text>`).join('')}
+      <text x="${l}" y="${H - 4}" class="eixo">idade${pts.some(x => x.id.corrigida) || hoje?.corrigida ? ' corrigida' : ''}</text>
+      <text x="${W - r}" y="${H - 4}" text-anchor="end" class="eixo">${un}</text>
+      ${linhas.map(li => `<polyline fill="none" stroke="${li.cor}" stroke-width="${li.z === 0 ? 2 : 1.4}" ${Math.abs(li.z) === 3 ? 'stroke-dasharray="5 4"' : ''}
+        points="${li.pts.map(([d, v]) => `${X(d).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}"/>
+        <text x="${W - r - 2}" y="${Y(li.pts[li.pts.length - 1][1]) - 3}" text-anchor="end" class="z" fill="${li.cor}">${li.z > 0 ? '+' : ''}${li.z}</text>`).join('')}
+      ${pts.length > 1 ? `<polyline fill="none" class="medida" points="${pts.slice().sort((a, b2) => a.id.dias - b2.id.dias).map(x => `${X(x.id.dias).toFixed(1)},${Y(x.v).toFixed(1)}`).join(' ')}"/>` : ''}
+      ${pts.map(x => `<circle cx="${X(x.id.dias).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="4.5" class="ponto"><title>${U.fmtDate(x.m.data)}: ${num(x.v, ind === 'peso' ? 3 : 1)} ${un}</title></circle>`).join('')}
+    </svg>`;
+  }
+  // "z +0,35 · P64"
+  const zTxt = a => (a ? `z ${a.z > 0 ? '+' : a.z < 0 ? '−' : ''}${String(Math.abs(a.z)).replace('.', ',')} · P${String(a.p).replace('.', ',')}` : '');
+
+  function painelCrescimento(c, medidas) {
+    if (!c.nascimento) return emptyMsg('Preencha a data de nascimento para ver as curvas.');
+    if (!['M', 'F'].includes(c.sexo)) return `<p class="muted">Informe o sexo em <b>Editar dados</b> para ver as curvas da OMS (são diferentes para meninos e meninas).</p>`;
+    if (!Crescimento.pronto()) {
+      Crescimento.carregar().then(() => render(true)).catch(() => {});
+      return '<p class="muted">Carregando as curvas da OMS…</p>';
+    }
+    const ind = state.curva;
+    const ultima = medidas.find(m => Number(m[ind]) > 0);
+    const av = ultima && D.avaliarMedida(c, ultima, ind);
+    const tabs = `<div class="tabs">${Object.entries(Crescimento.INDICADORES).map(([k, v]) => `<button type="button" class="tab ${k === ind ? 'active' : ''}"
+      data-action="pick-curva" data-curva="${k}">${esc(v.nome.split(' para ')[0])}</button>`).join('')}</div>`;
+    return tabs + (av ? `<div class="classe ${av.classe.tom}"><b>${esc(av.classe.texto)}</b>
+        <small>Última medida (${U.fmtDate(ultima.data)}): ${num(ultima[ind], ind === 'peso' ? 3 : 1)} ${Crescimento.INDICADORES[ind].unidade} · ${zTxt(av)}${av.corrigida ? ' · idade corrigida' : ''}</small></div>`
+        : `<p class="muted small">Nenhuma medida de ${esc(Crescimento.INDICADORES[ind].nome.split(' para ')[0].toLowerCase())} ainda.</p>`)
+      + graficoCrescimento(c, ind, medidas)
+      + `<p class="muted small">Linhas de escore-z da OMS: 0 (mediana), ±2 e ±3 (tracejado), como nos gráficos da Caderneta.
+        Fonte: <a href="https://www.who.int/tools/child-growth-standards/standards" target="_blank" rel="noopener">WHO Child Growth Standards (2006)</a>;
+        classificação da Caderneta da Criança (MS 2024, p. 92 a 95). Quem interpreta é o pediatra.</p>`;
+  }
+
   function filhos() {
     const lista = D.filhos();
     if (!lista.length) {
@@ -532,6 +589,7 @@
 
     const nascimento = c.nascimento ? `<dl class="dados">
         ${dado('Nascimento', U.fmtDate(c.nascimento))}
+        ${dado('Sexo', { M: 'Menino', F: 'Menina' }[c.sexo] || '')}
         ${dado('Idade', esc(D.idadeTxt(idade?.real)))}
         ${idade?.corrigida ? dado('Idade corrigida', `${esc(D.idadeTxt(idade.corrigida))} <small class="muted">(prematuro: usada nos marcos)</small>`) : ''}
         ${dado('Idade gestacional', esc(ig))}
@@ -577,23 +635,31 @@
           btn('+ Compromisso', 'new-event-filho', `data-pessoa="${esc(nome)}"`, 'small'))}
       </div>
       ${panel('🧩 Marcos do desenvolvimento', marcos)}
+      ${panel('📈 Curvas de crescimento (OMS)', painelCrescimento(c, medidas))}
+      ${panel('📏 Medidas', medidas.length ? `<div class="table-wrap"><table class="table">
+          <thead><tr><th>Data</th><th>Idade</th><th>Peso</th><th>Comprimento</th><th>PC</th><th></th></tr></thead><tbody>
+          ${medidas.map(m => {
+            const cel = (ind, casas, un) => {
+              if (!m[ind]) return '<td>—</td>';
+              const a = D.avaliarMedida(c, m, ind);
+              return `<td>${num(m[ind], casas)} ${un}${a ? `<small class="z ${a.classe.tom}">${zTxt(a)}</small>` : ''}</td>`;
+            };
+            return `<tr><td>${U.fmtDate(m.data)}</td><td>${esc(idadeCurta(D.idadeEntre(c.nascimento, m.data)))}</td>
+              ${cel('peso', 3, 'kg')}${cel('comprimento', 1, 'cm')}${cel('pc', 1, 'cm')}
+              <td>${btn('✎', 'edit-medida', `data-id="${esc(m.id)}" aria-label="Editar"`, 'small ghost')}</td></tr>`;
+          }).join('')}
+          </tbody></table></div>` : emptyMsg('Nenhuma medida registrada.'),
+          btn('+ Medida', 'new-medida', `data-crianca="${esc(c.id)}"`, 'small'))}
       <div class="grid-2">
         ${panel('💊 Remédios e suplementos', remedios.length ? remedios.map(m => `<div class="row"><span class="ico">${medIco(m)}</span>
           <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([m.dose, (m.horarios || []).join(', '), m.fim ? `até ${U.fmtDate(m.fim)}` : ''].filter(Boolean).join(' · '))}</small></span></div>`).join('')
           : emptyMsg('Nenhum em uso.'), btn('ver em Remédios', 'goto-remedios', `data-pessoa="${esc(nome)}"`, 'small'))}
-        ${panel('📏 Medidas', medidas.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Data</th><th>Idade</th><th>Peso</th><th>Comprimento</th><th>PC</th><th></th></tr></thead><tbody>
-          ${medidas.map(m => `<tr><td>${U.fmtDate(m.data)}</td><td>${esc(idadeCurta(D.idadeEntre(c.nascimento, m.data)))}</td>
-            <td>${m.peso ? `${num(m.peso, 3)} kg` : '—'}</td><td>${m.comprimento ? `${num(m.comprimento)} cm` : '—'}</td>
-            <td>${m.pc ? `${num(m.pc)} cm` : '—'}</td><td>${btn('✎', 'edit-medida', `data-id="${esc(m.id)}" aria-label="Editar"`, 'small ghost')}</td></tr>`).join('')}
-          </tbody></table></div><p class="muted small">As curvas da OMS entram na próxima atualização.</p>` : emptyMsg('Nenhuma medida registrada.'),
-          btn('+ Medida', 'new-medida', `data-crianca="${esc(c.id)}"`, 'small'))}
-      </div>
-      ${panel('📖 História médica', historia.length ? historia.map(h => `<button type="button" class="row link" data-action="edit-historia" data-id="${esc(h.id)}">
+        ${panel('📖 História médica', historia.length ? historia.map(h => `<button type="button" class="row link" data-action="edit-historia" data-id="${esc(h.id)}">
           <span class="date">${U.fmtDate(h.data)}</span>
           <span class="grow"><strong>${esc(h.titulo)}</strong><small>${esc([h.tipo, h.texto].filter(Boolean).join(' · '))}</small></span></button>`).join('')
         : emptyMsg('Doenças, exames, internações, alergias, vacinas fora do calendário…'),
-        btn('+ Registro', 'new-historia', `data-crianca="${esc(c.id)}"`, 'small'))}`;
+        btn('+ Registro', 'new-historia', `data-crianca="${esc(c.id)}"`, 'small'))}
+      </div>`;
   }
 
   function automacao() {
@@ -1137,6 +1203,8 @@ ${kinds}${filhos}`;
       values: c,
       fields: [
         { name: 'nascimento', label: 'Data de nascimento', type: 'date', required: true },
+        { name: 'sexo', label: 'Sexo', type: 'select', options: [['', '— escolher —'], ['M', 'Menino'], ['F', 'Menina']], required: true,
+          hint: 'As curvas da OMS são diferentes para meninos e meninas.' },
         { name: 'ig_semanas', label: 'Idade gestacional ao nascer (semanas)', type: 'number', min: 20, max: 44,
           hint: 'Abaixo de 37 semanas, os marcos usam a idade corrigida até os 2 anos (3 anos se < 28 semanas), como orienta a Caderneta.' },
         { name: 'ig_dias', label: '+ dias', type: 'number', min: 0, max: 6 },
@@ -1346,6 +1414,7 @@ ${kinds}${filhos}`;
     },
 
     'pick-filho': el => { state.filho = el.dataset.pessoa; render(true); },
+    'pick-curva': el => { state.curva = el.dataset.curva; render(true); },
     'edit-crianca': el => criancaForm(D.crianca(el.dataset.pessoa)),
     'set-marco': async el => {
       const { crianca: cid, marco, s } = el.dataset;

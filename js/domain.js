@@ -116,6 +116,28 @@ const D = (() => {
     }
     return { real, corrigida, usada: corrigida || real };
   }
+  // Idade em dias numa data, para as curvas da OMS. Prematuro: idade corrigida pelas mesmas regras
+  // da Caderneta ("Se não for utilizar o gráfico Intergrowth-21, calcular a idade corrigida", p. 20).
+  function idadeDias(c, data) {
+    if (!c?.nascimento || !data || data < c.nascimento) return null;
+    const dias = Math.round((U.parseYmd(data) - U.parseYmd(c.nascimento)) / 864e5);
+    const ig = igSemanas(c);
+    const meses = idadeEntre(c.nascimento, data).meses;
+    if (ig && ig < 37 && meses < (ig < 28 ? 36 : 24)) {
+      const d = dias - Math.round((40 - ig) * 7);
+      return { dias: Math.max(0, d), corrigida: true, antesDoTermo: d < 0 };
+    }
+    return { dias, corrigida: false };
+  }
+  // Escore-z, percentil e classificação de cada medida (precisa do sexo e das tabelas da OMS carregadas).
+  function avaliarMedida(c, m, ind) {
+    const id = idadeDias(c, m.data);
+    const x = Number(m[ind]);
+    if (!id || id.antesDoTermo || !x || !['M', 'F'].includes(c.sexo) || !Crescimento.pronto()) return null;
+    const z = Crescimento.zscore(ind, c.sexo, id.dias, x);
+    return z == null ? null : { z, p: Crescimento.percentil(z), classe: Crescimento.classificar(ind, z), dias: id.dias, corrigida: id.corrigida };
+  }
+
   // "12 dias", "3 meses e 5 dias", "2 anos e 1 mês"
   function idadeTxt(i) {
     if (!i) return '';
@@ -375,7 +397,7 @@ const D = (() => {
     mealId, mealOwn, meal, mealResumo, suplementosDe,
     occursOn, eventsOn, eventsBetween,
     isRecorrente, taskApplies, taskDone, tasksOn, freqLabel,
-    criancaId, crianca, mesesDepois, idadeEntre, idadeCrianca, idadeTxt, faixaMarcos, marcoKey, marcoDe, marcosAtencao, marcosSemMarcar,
+    criancaId, crianca, mesesDepois, idadeEntre, idadeCrianca, idadeDias, avaliarMedida, idadeTxt, faixaMarcos, marcoKey, marcoDe, marcosAtencao, marcosSemMarcar,
     consultaEventoId, consultasRecomendadas, medidasDe, historiaDe, TIPOS_HISTORIA,
     FAIXAS, faixaDe, pendencias, FOCO_MAX, emFoco, focoDe,
   };
