@@ -34,6 +34,9 @@ const CONFIG = {
 };
 
 const PREFIXO = 'gtasks-';
+// Para quem atualiza só o código e mantém um CONFIG antigo, sem PESSOAS / DONO_DA_CONTA.
+const PESSOAS = CONFIG.PESSOAS || ['Renato', 'Vanessa'];
+const DONO_DA_CONTA = CONFIG.DONO_DA_CONTA != null ? CONFIG.DONO_DA_CONTA : 'Renato';
 
 function sincronizarTarefas() {
   const trava = LockService.getScriptLock();
@@ -63,10 +66,10 @@ function listaDaTarefa(d) {
 // em "Minhas tarefas" (lista pessoal: um nome ali costuma ser com quem falar, não quem faz).
 // Nas outras listas, o único nome de PESSOAS citado no título ou na descrição.
 function responsavelDe(g, listaGoogle) {
-  const dono = CONFIG.DONO_DA_CONTA || '';
+  const dono = DONO_DA_CONTA;
   if (dono && (g.assignmentInfo || /^(minhas tarefas|my tasks)$/i.test(listaGoogle))) return dono;
   const texto = (g.title || '') + '\n' + (g.notes || '');
-  const citados = (CONFIG.PESSOAS || []).filter(n => new RegExp('(^|[^\\p{L}])' + n + '($|[^\\p{L}])', 'iu').test(texto));
+  const citados = PESSOAS.filter(n => new RegExp('(^|[^\\p{L}])' + n + '($|[^\\p{L}])', 'iu').test(texto));
   return citados.length === 1 ? citados[0] : citados.length > 1 ? 'Ambos' : '';
 }
 
