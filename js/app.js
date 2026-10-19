@@ -45,7 +45,7 @@
   const medIco = m => (D.ehSuplemento(m) ? '🌿' : '💊');
 
   // Abas por pessoa: [primeiro] + Renato, Vanessa, Antônio… (contar = número ao lado do nome).
-  const pessoaTabs = (action, sel, primeiro, contar) => `<div class="tabs">${[['', primeiro], ...D.pessoas().map(p => [p, p])]
+  const pessoaTabs = (action, sel, primeiro, contar, quem = D.pessoas()) => `<div class="tabs">${[['', primeiro], ...quem.map(p => [p, p])]
     .map(([v, label]) => `<button type="button" class="tab ${v === sel ? 'active' : ''}" data-action="${action}" data-pessoa="${esc(v)}">
       ${esc(label)}${contar ? `<span class="count">${contar(v)}</span>` : ''}</button>`).join('')}</div>`;
 
@@ -338,7 +338,7 @@
 
   function tarefas() {
     const t = U.today();
-    const ps = D.pessoas();
+    const ps = D.adultos();
     if (state.tarPessoa == null) state.tarPessoa = ps.includes(D.eu()) ? D.eu() : '';
     const sel = ps.includes(state.tarPessoa) ? state.tarPessoa : '';
     const chave = sel || D.eu();
@@ -376,7 +376,7 @@
           <input type="date" name="data" aria-label="Ou escolha a data">
           <span class="spacer"></span><button class="btn primary" type="submit">Adicionar</button></div>
       </form>
-      ${pessoaTabs('pick-tar-pessoa', sel, 'Todos', abertos)}
+      ${pessoaTabs('pick-tar-pessoa', sel, 'Todos', abertos, ps)}
       ${panel(`🎯 Foco do dia${chave ? ` — ${esc(chave)}` : ''}`, progresso(pend) + (foco.length
         ? foco.map(p => pendRow(p, chave)).join('')
         : `<p class="muted">Escolha até ${D.FOCO_MAX} coisas para hoje tocando na ☆. O resto pode esperar.</p>`))}
@@ -642,6 +642,8 @@ ${kinds}`;
           <label>Pessoa 1<input name="p1" value="${esc(nomes[0] || '')}"></label>
           <label>Pessoa 2<input name="p2" value="${esc(nomes[1] || '')}"></label>
           <label>Outras pessoas (separadas por vírgula — filhos, avós…)<input name="outros" value="${esc(nomes.slice(2).join(', '))}"></label>
+          <label>Quem é filho (separados por vírgula) — aparece em Remédios, Alimentação e Calendário, mas não em Tarefas
+            <input name="filhos" value="${esc(D.filhos().join(', '))}" placeholder="Ex.: Antônio"></label>
           <button class="btn primary" type="submit">Salvar</button></form>`)}
         ${panel('Este aparelho', `<p class="muted">Diga de quem é este celular/computador. Usado para assinar recados e mostrar quem adicionou itens nas listas.</p>
           <label class="form-inline">Este aparelho é de
@@ -908,7 +910,7 @@ ${kinds}`;
         { name: 'titulo', label: 'O quê', required: true },
         { name: 'data', label: 'Data', type: 'date', required: true },
         { name: 'hora', label: 'Hora', type: 'time' },
-        { name: 'pessoa', label: 'Quem', type: 'select', options: D.responsaveis(), default: 'Ambos' },
+        { name: 'pessoa', label: 'Quem', type: 'select', options: [...D.pessoas(), 'Ambos'], default: 'Ambos' },
         { name: 'local', label: 'Local' },
         { name: 'repete', label: 'Repetir', type: 'select', options: D.REPETE, hint: 'Use “Todo ano” para aniversários.' },
         { name: 'obs', label: 'Observações', type: 'textarea' },
@@ -1274,7 +1276,7 @@ ${kinds}`;
         const dias = { hoje: 0, amanha: 1, semana: 7 }[quando];
         const data = String(f.get('data') || '') || (dias == null ? '' : U.ymd(U.addDays(new Date(), dias)));
         state.novaQuando = quando;
-        const sel = D.pessoas().includes(state.tarPessoa) ? state.tarPessoa : '';
+        const sel = D.adultos().includes(state.tarPessoa) ? state.tarPessoa : '';
         await Store.put('tarefa', { titulo, tipo: 'unica', data, responsavel: sel, feito: false });
         render(true);
         toast(`Adicionada: ${D.FAIXAS.find(x => x.id === D.faixaDe(data)).nome.toLowerCase()} ✔`);
@@ -1301,7 +1303,10 @@ ${kinds}`;
       e.preventDefault();
       const f = new FormData(form);
       const nomes = [f.get('p1'), f.get('p2'), ...String(f.get('outros')).split(',')].map(s => String(s || '').trim()).filter(Boolean);
-      Store.put('config', { id: 'pessoas', nomes });
+      // Filho escrito só no campo "filhos" também entra na lista de pessoas.
+      const filhos = String(f.get('filhos') || '').split(',').map(s => s.trim()).filter(Boolean);
+      filhos.forEach(n => { if (!nomes.includes(n)) nomes.push(n); });
+      Store.put('config', { id: 'pessoas', nomes, filhos });
       Store.put('config', { id: 'casa', nome: String(f.get('casa')).trim() });
       toast('Salvo ✔');
     });

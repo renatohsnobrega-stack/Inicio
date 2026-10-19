@@ -22,7 +22,10 @@ const D = (() => {
     const n = (config('pessoas').nomes || []).filter(Boolean);
     return n.length ? n : ['Eu', 'Esposa'];
   };
-  const responsaveis = () => [...pessoas(), 'Ambos'];
+  // Filhos aparecem em remédios, alimentação e agenda, mas não recebem tarefas nem pagam contas.
+  const filhos = () => (config('pessoas').filhos || []).filter(n => pessoas().includes(n));
+  const adultos = () => pessoas().filter(n => !filhos().includes(n));
+  const responsaveis = () => [...adultos(), 'Ambos'];
   const casaNome = () => config('casa').nome || 'Nossa Casa';
 
   // Quem está usando este aparelho (fica só neste navegador).
@@ -268,7 +271,7 @@ const D = (() => {
   return {
     SLOTS, CATEGORIAS, LOCAIS, TIPOS_TAREFA, REPETE, STATUS_LABEL, LISTAS_SUGERIDAS, CATEG_CONTATO,
     UNIDADES, AVISO_ESTOQUE,
-    config, pessoas, responsaveis, casaNome, eu, setEu, corDe,
+    config, pessoas, filhos, adultos, responsaveis, casaNome, eu, setEu, corDe,
     paraRevisar, recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
     billOccurrences, billStatus, contasAtencao,
     medActiveOn, doseKey, dosesOn, ehSuplemento, temEstoque, estoque, estoqueAcabando, fmtQtd,
