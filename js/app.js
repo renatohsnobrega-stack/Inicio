@@ -10,7 +10,9 @@
     importacao: null, // pré-visualização da importação: [{ kind, data, erros }]
     novaChave: null,  // chave de API recém-criada (mostrada uma vez)
     chaves: null,
-    print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth() },
+    remPessoa: '',    // aba de Remédios ('' = todos)
+    aliPessoa: null,  // aba de Alimentação ('' = família; null = escolher pelo dono do aparelho)
+    print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth(), pessoa: '' },
   };
 
   const NAV = [
@@ -37,11 +39,29 @@
       <header class="panel-head"><h2>${title}</h2>${actions}</header>${body}</section>`;
   const stat = (label, value, tone = '') => `<div class="stat ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
   const opts = arr => arr.map(o => (Array.isArray(o) ? o : [o, o]));
+  const medIco = m => (D.ehSuplemento(m) ? '🌿' : '💊');
+
+  // Abas por pessoa: [primeiro] + Renato, Vanessa, Antônio… (contar = número ao lado do nome).
+  const pessoaTabs = (action, sel, primeiro, contar) => `<div class="tabs">${[['', primeiro], ...D.pessoas().map(p => [p, p])]
+    .map(([v, label]) => `<button type="button" class="tab ${v === sel ? 'active' : ''}" data-action="${action}" data-pessoa="${esc(v)}">
+      ${esc(label)}${contar ? `<span class="count">${contar(v)}</span>` : ''}</button>`).join('')}</div>`;
+
+  // "restam 12 comprimidos · dá para 6 dias (até 24/10)"
+  const estoqueTxt = (m, e) => {
+    const qtd = `restam ${D.fmtQtd(e.restante)} ${m.unidade || 'un.'}`;
+    if (!e.porDia) return qtd;
+    if (e.status === 'acabou') return `${qtd} · não dá para hoje`;
+    return `${qtd} · dá para ${e.dias} ${e.dias === 1 ? 'dia' : 'dias'} (até ${U.fmtDay(U.ymd(U.addDays(U.parseYmd(e.acaba), -1)))})`;
+  };
+  const estoqueRow = ({ med, est }) => `<div class="row ${est.status === 'acabou' ? 'status-atrasada' : 'status-hoje'}">
+      <span class="ico">${medIco(med)}</span>
+      <span class="grow"><strong>${esc(med.nome)}</strong><small>${esc([med.pessoa, estoqueTxt(med, est)].filter(Boolean).join(' · '))}</small></span>
+      ${btn('Repor', 'repor-med', `data-id="${esc(med.id)}"`, 'small primary')}</div>`;
 
   const doseRow = d => `<label class="check-row ${d.tomado ? 'done' : ''}">
       <input type="checkbox" data-action="toggle-dose" data-key="${esc(d.key)}" ${d.tomado ? 'checked' : ''}>
       <span class="time">${d.hora}</span>
-      <span class="grow"><strong>${esc(d.med.nome)}</strong>${d.med.dose ? ` · ${esc(d.med.dose)}` : ''}
+      <span class="grow"><strong>${D.ehSuplemento(d.med) ? '🌿 ' : ''}${esc(d.med.nome)}</strong>${d.med.dose ? ` · ${esc(d.med.dose)}` : ''}
         <small>${esc([d.med.pessoa, d.med.instrucoes].filter(Boolean).join(' · '))}</small></span></label>`;
 
   const taskRow = t => `<label class="check-row ${t.feito ? 'done' : ''}">
@@ -109,6 +129,7 @@
     const revisar = D.paraRevisar();
     const compras = D.listas()[0];
     const itens = compras ? D.itensDa(compras.id).filter(i => !i.feito) : [];
+    const acabando = D.estoqueAcabando();
 
     return pageHead(`Olá${D.eu() ? `, ${esc(D.eu())}` : ''}! Hoje é ${U.longDate(t)}`, D.casaNome(), printBtn('dia', `data-date="${t}"`)) + `
       <div class="stats">
@@ -125,6 +146,8 @@
           ${btn('Editar', 'review-edit', `data-kind="${kind}" data-id="${esc(obj.id)}"`, 'small')}
           ${btn('✕', 'review-del', `data-kind="${kind}" data-id="${esc(obj.id)}" aria-label="Descartar"`, 'small ghost')}
         </div>`).join('') + `<div class="actions" style="margin-top:8px">${btn('Aprovar todos', 'review-all', '', 'small')}</div>`) : ''}
+      ${acabando.length ? panel(`⚠️ Estoque acabando (${acabando.length})`, acabando.map(estoqueRow).join(''),
+        `<a href="#/remedios" class="more">ver remédios</a>`) : ''}
       <div class="grid-2">
         ${panel('📌 Mural', recados.length ? recados.map(noteMini).join('') : emptyMsg('Nenhum recado. Deixe um para quem chega em casa!'),
           `<a href="#/mural" class="more">escrever</a>`)}
@@ -137,7 +160,7 @@
         ${panel('💰 Contas atrasadas e próximas', atencao.length ? atencao.map(o => billRow(o)).join('') : emptyMsg('Nada vencendo nos próximos 10 dias. 🎉'),
           `<a href="#/contas" class="more">ver mês</a>`)}
         ${panel('🍽️ Cardápio de hoje', `<dl class="meals-today">${D.SLOTS.map(s =>
-          `<dt>${s.nome}</dt><dd>${nl2br(D.meal(wd, s.id)) || '<span class="muted">—</span>'}</dd>`).join('')}</dl>`,
+          `<dt>${s.nome}</dt><dd>${Print.mealLines(wd, s.id) || '<span class="muted">—</span>'}</dd>`).join('')}</dl>`,
           `<a href="#/alimentacao" class="more">editar</a>`)}
         ${panel('✅ Tarefas de hoje', tarefas.length ? tarefas.map(taskRow).join('') : emptyMsg('Nenhuma tarefa para hoje.'),
           `<a href="#/tarefas" class="more">ver todas</a>`)}
@@ -181,36 +204,65 @@
 
   function remedios() {
     const t = U.today();
-    const doses = D.dosesOn(t);
-    const meds = Store.list('remedio').sort((a, b) => (a.pessoa || '').localeCompare(b.pessoa || '') || a.nome.localeCompare(b.nome));
+    const sel = D.pessoas().includes(state.remPessoa) ? state.remPessoa : '';
+    const daPessoa = m => !sel || (m.pessoa || '') === sel;
+    const doses = D.dosesOn(t).filter(d => daPessoa(d.med));
+    const meds = Store.list('remedio').filter(daPessoa)
+      .sort((a, b) => (a.pessoa || '').localeCompare(b.pessoa || '') || a.nome.localeCompare(b.nome));
+    const acabando = D.estoqueAcabando().filter(x => daPessoa(x.med));
     const card = m => {
       const ativo = D.medActiveOn(m, t);
+      const est = D.estoque(m);
       return `<article class="card ${ativo ? '' : 'inactive'}">
-        <header><h3>${esc(m.nome)}</h3>${btn('Editar', 'edit-med', `data-id="${esc(m.id)}"`, 'small ghost')}</header>
+        <header><h3>${medIco(m)} ${esc(m.nome)}</h3>${btn('Editar', 'edit-med', `data-id="${esc(m.id)}"`, 'small ghost')}</header>
         <p><strong>${esc(m.pessoa || '')}</strong>${m.dose ? ` · ${esc(m.dose)}` : ''}</p>
         <div class="chips">${(m.horarios || []).map(h => `<span class="chip">${h}</span>`).join('') || '<span class="muted">sem horário fixo</span>'}</div>
         ${m.instrucoes ? `<p class="muted">${esc(m.instrucoes)}</p>` : ''}
+        ${est ? `<p class="small estoque ${est.status}">📦 ${esc(estoqueTxt(m, est))} ${btn('Repor', 'repor-med', `data-id="${esc(m.id)}"`, 'small ghost')}</p>` : ''}
         <p class="muted small">${m.inicio ? `De ${U.fmtDate(m.inicio)} ` : ''}${m.fim ? `até ${U.fmtDate(m.fim)}` : 'Uso contínuo'}${ativo ? '' : ' · inativo'}</p>
       </article>`;
     };
-    return pageHead('Remédios', 'Horários, doses e controle do que já foi tomado',
-      printBtn('remedios') + btn('+ Novo remédio', 'new-med', '', 'primary')) + `
+    const grupo = (titulo, lista, vazio) => `<h2 class="group-title">${titulo}</h2>
+      ${lista.length ? `<div class="cards">${lista.map(card).join('')}</div>` : emptyMsg(vazio)}`;
+    const ativos = v => Store.list('remedio').filter(m => (!v || (m.pessoa || '') === v) && D.medActiveOn(m, t)).length;
+    const novo = cat => `data-categoria="${cat}" data-pessoa="${esc(sel)}"`;
+    return pageHead('Remédios e suplementos', 'Horários, doses, estoque e controle do que já foi tomado',
+      printBtn('remedios') + btn('+ Suplemento', 'new-med', novo('suplemento')) + btn('+ Remédio', 'new-med', novo('remedio'), 'primary')) + `
+      ${pessoaTabs('pick-rem-pessoa', sel, 'Todos', ativos)}
+      ${acabando.length ? panel(`⚠️ Estoque acabando (${acabando.length})`, acabando.map(estoqueRow).join('')) : ''}
       <div class="grid-2 wide-first">
         ${panel(`Hoje — ${U.longDate(t)}`, doses.length ? doses.map(doseRow).join('') : emptyMsg('Nenhuma dose para hoje.'))}
-        ${panel('Dica', `<p class="muted">Imprima o <b>quadro de remédios da semana</b> e deixe no banheiro ou na cozinha.
-          Quem tomar marca no papel — ou aqui no painel, que sincroniza com o celular do outro.</p>`)}
+        ${panel('Dica', `<p class="muted">Informe a <b>quantidade disponível</b> de cada remédio: o app desconta as doses de cada dia e,
+          ${D.AVISO_ESTOQUE} dias antes de acabar, avisa no Painel e põe o item na lista da farmácia.</p>
+          <p class="muted">Imprima o <b>quadro de remédios da semana</b> e deixe no banheiro ou na cozinha.</p>`)}
       </div>
-      <div class="cards">${meds.length ? meds.map(card).join('') : emptyMsg('Nenhum remédio cadastrado.')}</div>`;
+      ${grupo('💊 Remédios', meds.filter(m => !D.ehSuplemento(m)), 'Nenhum remédio cadastrado.')}
+      ${grupo('🌿 Suplementos', meds.filter(D.ehSuplemento), 'Nenhum suplemento cadastrado.')}`;
   }
 
   function alimentacao() {
     const hoje = U.mondayIndex(new Date());
-    return pageHead('Rotina alimentar', 'Cardápio fixo da semana — as alterações são salvas automaticamente',
-      printBtn('cardapio')) + `
+    const ps = D.pessoas();
+    if (state.aliPessoa == null) state.aliPessoa = ps.includes(D.eu()) ? D.eu() : '';
+    const sel = ps.includes(state.aliPessoa) ? state.aliPessoa : '';
+    const supl = D.suplementosDe(sel || null);
+    const placeholder = (wd, slot) => (sel && D.mealOwn(wd, slot) ? `Família: ${D.mealOwn(wd, slot)}` : '—');
+    return pageHead('Rotina alimentar', sel
+      ? `Refeições de ${esc(sel)}. Campo vazio = come o mesmo que a família.`
+      : 'Refeições que a família faz junto. Na aba de cada pessoa, o que ficar vazio usa o da família.',
+      printBtn('cardapio', `data-pessoa="${esc(sel)}"`)) + `
+      ${pessoaTabs('pick-ali-pessoa', sel, '🏠 Família')}
+      ${panel(`🌿 Suplementos${sel ? ` de ${esc(sel)}` : ''}`, supl.length ? supl.map(m => `<div class="row">
+          <span class="time">${esc((m.horarios || []).join(', ') || '—')}</span>
+          <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([sel ? '' : m.pessoa, m.dose, m.instrucoes].filter(Boolean).join(' · '))}</small></span>
+          ${btn('Editar', 'edit-med', `data-id="${esc(m.id)}"`, 'small ghost')}</div>`).join('')
+        : emptyMsg('Nenhum suplemento. Eles são cadastrados em Remédios e aparecem aqui também.'),
+        btn('+ Suplemento', 'new-med', `data-categoria="suplemento" data-pessoa="${esc(sel)}"`, 'small'))}
       <div class="week-grid">${U.WD.map((dia, wd) => `<section class="day-card ${wd === hoje ? 'today' : ''}">
         <h3>${dia}${wd === hoje ? ' <span class="badge hoje">hoje</span>' : ''}</h3>
         ${D.SLOTS.map(s => `<label class="meal"><span>${s.nome}</span>
-          <textarea rows="2" data-action="save-meal" data-id="${D.mealId(wd, s.id)}" placeholder="—">${esc(D.meal(wd, s.id))}</textarea></label>`).join('')}
+          <textarea rows="2" data-action="save-meal" data-id="${esc(D.mealId(wd, s.id, sel))}" data-pessoa="${esc(sel)}"
+            placeholder="${esc(placeholder(wd, s.id))}">${esc(D.mealOwn(wd, s.id, sel))}</textarea></label>`).join('')}
       </section>`).join('')}</div>
       ${panel('Observações / regras da alimentação', `<textarea class="full" rows="4" data-action="save-meal-obs"
         placeholder="Ex.: beber 2L de água, sem fritura durante a semana, fruta no lanche…">${esc(D.config('alimentacao').obs || '')}</textarea>`)}`;
@@ -442,10 +494,13 @@ ${kinds}`;
     const linhas = [`# Rotina da casa — ${U.longDate(t)}`, ''];
     const occ = D.billOccurrences(U.thisMonth());
     linhas.push(`## Contas de ${U.monthLabel(U.thisMonth())}`, ...occ.map(o => `- ${U.fmtDay(o.venc)} ${o.conta.nome}: ${U.brl(o.valor)} (${o.pago ? 'paga' : D.STATUS_LABEL[D.billStatus(o)].toLowerCase()})`), '');
-    linhas.push('## Remédios', ...Store.list('remedio').filter(m => D.medActiveOn(m, t)).map(m => `- ${m.nome} ${m.dose || ''} — ${m.pessoa || ''} — ${(m.horarios || []).join(', ')} ${m.instrucoes ? `(${m.instrucoes})` : ''}`), '');
+    linhas.push('## Remédios e suplementos', ...Store.list('remedio').filter(m => D.medActiveOn(m, t)).map(m => `- ${D.ehSuplemento(m) ? '[suplemento] ' : ''}${m.nome} ${m.dose || ''} — ${m.pessoa || ''} — ${(m.horarios || []).join(', ')} ${m.instrucoes ? `(${m.instrucoes})` : ''}`), '');
+    const acabando = D.estoqueAcabando();
+    if (acabando.length) linhas.push('## Estoque acabando', ...acabando.map(({ med, est }) => `- ${med.nome} (${med.pessoa || ''}): ${estoqueTxt(med, est)}`), '');
     linhas.push('## Compromissos (30 dias)', ...D.eventsBetween(t, U.ymd(U.addDays(new Date(), 30))).map(({ date, ev }) => `- ${U.fmtDate(date)} ${ev.hora || ''} ${ev.titulo}`), '');
     linhas.push('## Rotina de tarefas', ...Store.list('tarefa').filter(D.isRecorrente).map(x => `- ${x.titulo} — ${D.freqLabel(x)} — ${x.responsavel || ''}`), '');
-    linhas.push('## Cardápio', ...U.WD.map((d, wd) => `- ${d}: ${D.SLOTS.map(sl => D.meal(wd, sl.id)).filter(Boolean).join(' / ') || '—'}`));
+    linhas.push('## Cardápio', ...U.WD.map((d, wd) => `- ${d}: ${D.SLOTS.map(sl => D.mealResumo(wd, sl.id)
+      .map(x => `${x.quem ? `${x.quem}: ` : ''}${x.texto}`).join('; ')).filter(Boolean).join(' / ') || '—'}`));
     return linhas.join('\n');
   }
 
@@ -491,6 +546,8 @@ ${kinds}`;
       month: `<label>Mês <input type="month" data-action="print-param" data-key="month" value="${p.month}"></label>`,
       lista: `<label>Lista <select data-action="print-param" data-key="lista">${D.listas().map(l =>
         `<option value="${esc(l.id)}" ${l.id === p.lista ? 'selected' : ''}>${esc(l.nome)}</option>`).join('')}</select></label>`,
+      pessoa: `<label>De quem <select data-action="print-param" data-key="pessoa"><option value="">Todos</option>${D.pessoas().map(n =>
+        `<option ${n === p.pessoa ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`,
     }[sheet.param] || '';
     return pageHead('Central de impressão', 'Folhas A4 prontas para deixar nos lugares certos da casa') + `
       <div class="print-layout">
@@ -575,6 +632,40 @@ ${kinds}`;
     toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
   }
 
+  // ---------- Estoque de remédios ----------
+  // Remédio acabando vira item na lista da farmácia, uma vez por ciclo (repor libera o próximo aviso).
+  // O id do item é fixo por remédio, então os dois celulares fazendo isso ao mesmo tempo não duplicam.
+  let cuidandoEstoque = false;
+  async function cuidarEstoque() {
+    if (cuidandoEstoque) return;
+    cuidandoEstoque = true;
+    try {
+      // Estoque gravado por um agente sem a data da contagem: conta a partir de hoje.
+      for (const m of Store.list('remedio')) {
+        if (D.temEstoque(m) && !m.estoque_em) await Store.put('remedio', { ...m, estoque_em: U.today() });
+      }
+      for (const { med } of D.estoqueAcabando()) {
+        if (med.avisado) continue;
+        const lista = await listaFarmacia();
+        const id = `estoque-${med.id}`;
+        await Store.put('item', { ...(Store.get('item', id) || {}), id, lista: lista.id, feito: false, por: 'aviso de estoque',
+          texto: `${med.nome}${med.pessoa ? ` (${med.pessoa})` : ''}`, criadoEm: new Date().toISOString() });
+        await Store.put('remedio', { ...Store.get('remedio', med.id), avisado: true });
+        toast(`${medIco(med)} ${med.nome} está acabando: foi para a lista ${lista.nome}`);
+      }
+    } finally {
+      cuidandoEstoque = false;
+    }
+  }
+  const semAcento = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  async function listaFarmacia() {
+    const ls = D.listas();
+    return ls.find(l => semAcento(l.nome).includes('farmacia')) || ls.find(l => semAcento(l.nome).includes('compra'))
+      || Store.put('lista', { id: 'farmacia', nome: 'Farmácia', icone: '💊', criadaEm: new Date().toISOString() });
+  }
+  let estoqueTimer;
+  const agendarEstoque = () => { clearTimeout(estoqueTimer); estoqueTimer = setTimeout(cuidarEstoque, 1500); };
+
   // ---------- Formulário genérico ----------
   function fieldHtml(f, val) {
     const id = `f-${f.name}`;
@@ -607,7 +698,7 @@ ${kinds}`;
         input = `<input id="${id}" name="${f.name}" list="${id}-l" value="${esc(v)}"><datalist id="${id}-l">${f.options.map(o => `<option value="${esc(o)}">`).join('')}</datalist>`;
         break;
       default:
-        input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" value="${esc(v)}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
+        input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" value="${esc(v)}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''} ${f.step ? `step="${f.step}" inputmode="decimal"` : ''}>`;
     }
     return `<div class="field" data-field="${f.name}"><label for="${id}">${esc(f.label)}${f.required ? ' *' : ''}</label>${input}${f.hint ? `<small class="muted">${esc(f.hint)}</small>` : ''}</div>`;
   }
@@ -693,20 +784,40 @@ ${kinds}`;
   }
 
   function medForm(med = {}) {
+    const est = med.id ? D.estoque(med) : null;
+    const sup = D.ehSuplemento(med);
+    const comEstoque = v => v.estoque !== '';
     openForm({
-      title: med.id ? 'Editar remédio' : 'Novo remédio',
-      values: med,
+      title: `${med.id ? 'Editar' : 'Novo'} ${sup ? 'suplemento' : 'remédio'}`,
+      // O formulário mostra o estoque de hoje (já descontadas as doses dos dias passados).
+      values: { ...med, estoque: est ? est.restante : med.estoque },
       fields: [
-        { name: 'nome', label: 'Remédio', required: true },
+        { name: 'nome', label: sup ? 'Suplemento' : 'Remédio', required: true },
+        { name: 'categoria', label: 'Tipo', type: 'select', options: [['remedio', 'Remédio'], ['suplemento', 'Suplemento (aparece também em Alimentação)']], default: 'remedio' },
         { name: 'pessoa', label: 'Para quem', type: 'combo', options: D.pessoas(), default: D.pessoas()[0] },
         { name: 'dose', label: 'Dose', hint: 'Ex.: 1 comprimido de 50mg, 10 gotas' },
         { name: 'horarios', label: 'Horários', type: 'times', hint: 'Separe por vírgula. Ex.: 08:00, 14:00, 20:00' },
         { name: 'instrucoes', label: 'Como tomar', hint: 'Ex.: em jejum, após o almoço, com água' },
         { name: 'inicio', label: 'Início', type: 'date', default: U.today() },
         { name: 'fim', label: 'Fim (vazio = uso contínuo)', type: 'date' },
+        { name: 'estoque', label: 'Quantidade disponível agora', type: 'number', min: 0, step: 'any',
+          hint: `Ex.: 28 comprimidos. O app desconta as doses de cada dia e avisa ${D.AVISO_ESTOQUE} dias antes de acabar. Vazio = não controlar.` },
+        { name: 'unidade', label: 'Unidade', type: 'combo', options: D.UNIDADES, default: 'comprimidos', showIf: comEstoque },
+        { name: 'por_dose', label: 'Unidades gastas em cada horário', type: 'number', min: 0, step: 'any', default: 1, showIf: comEstoque,
+          hint: 'Ex.: 1 comprimido, 0.5 (meio), 20 gotas' },
         { name: 'ativo', label: 'Ativo', type: 'bool', default: true },
       ],
-      onSave: v => Store.put('remedio', { ...med, ...v }),
+      onSave: v => {
+        const novo = { ...med, ...v };
+        if (v.estoque === '') {
+          novo.estoque = '';
+          novo.estoque_em = '';
+        } else {
+          novo.estoque_em = U.today();
+          if (!est || v.estoque > est.restante) novo.avisado = false; // reposição libera um novo aviso
+        }
+        return Store.put('remedio', novo);
+      },
       onDelete: med.id ? () => Store.remove('remedio', med.id) : null,
     });
   }
@@ -790,6 +901,7 @@ ${kinds}`;
       if (el.dataset.month) state.print.month = el.dataset.month;
       if (el.dataset.date) state.print.date = el.dataset.date;
       if (el.dataset.lista) state.print.lista = el.dataset.lista;
+      if ('pessoa' in el.dataset) state.print.pessoa = el.dataset.pessoa;
       location.hash = '#/imprimir';
     },
 
@@ -816,7 +928,24 @@ ${kinds}`;
       Store.put('conta', { ...conta, pagos });
     },
 
-    'new-med': () => medForm(),
+    'new-med': el => medForm({ categoria: el.dataset.categoria || 'remedio', ...(el.dataset.pessoa ? { pessoa: el.dataset.pessoa } : {}) }),
+    'pick-rem-pessoa': el => { state.remPessoa = el.dataset.pessoa; render(true); },
+    'repor-med': el => {
+      const med = Store.get('remedio', el.dataset.id);
+      const est = D.estoque(med);
+      openForm({
+        title: `Repor: ${med.nome}`,
+        saveLabel: 'Somar ao estoque',
+        fields: [{ name: 'qtd', label: `Quantos ${med.unidade || 'unidades'} chegaram?`, type: 'number', min: 0, step: 'any', required: true,
+          hint: est ? `Hoje ${estoqueTxt(med, est)}.` : '' }],
+        onSave: async v => {
+          const total = Math.round(((est ? est.restante : 0) + Number(v.qtd)) * 100) / 100;
+          await Store.put('remedio', { ...med, estoque: total, estoque_em: U.today(), avisado: false });
+          const item = Store.get('item', `estoque-${med.id}`);
+          if (item && !item.feito) await Store.put('item', { ...item, feito: true });
+        },
+      });
+    },
     'edit-med': el => medForm(Store.get('remedio', el.dataset.id)),
     'toggle-dose': el => {
       const key = el.dataset.key;
@@ -842,8 +971,9 @@ ${kinds}`;
       }
     },
 
+    'pick-ali-pessoa': el => { state.aliPessoa = el.dataset.pessoa; render(true); },
     'save-meal': el => {
-      Store.put('refeicao', { id: el.dataset.id, texto: el.value.trim() });
+      Store.put('refeicao', { id: el.dataset.id, texto: el.value.trim(), pessoa: el.dataset.pessoa || '' });
       toast('Cardápio salvo ✔');
     },
     'save-meal-obs': el => {
@@ -852,7 +982,7 @@ ${kinds}`;
     },
 
     'print-sheet': el => { state.print.sheet = el.dataset.sheet; render(true); },
-    'print-param': el => { if (el.value) state.print[el.dataset.key] = el.value; render(true); },
+    'print-param': el => { if (el.value || el.dataset.key === 'pessoa') state.print[el.dataset.key] = el.value; render(true); },
     'do-print': () => Print.print(state.print.sheet, state.print),
 
     'pin-note': el => { const r = Store.get('recado', el.dataset.id); Store.put('recado', { ...r, fixado: !r.fixado }); },
@@ -1050,7 +1180,7 @@ ${kinds}`;
     window.addEventListener('resize', fitPreview);
     // Volta para o app no dia seguinte (tablet na cozinha, por exemplo) com "hoje" atualizado.
     let lastDay = U.today();
-    setInterval(() => { if (U.today() !== lastDay) { lastDay = U.today(); render(); } }, 60000);
+    setInterval(() => { if (U.today() !== lastDay) { lastDay = U.today(); render(); agendarEstoque(); } }, 60000);
   }
 
   function showLogin() {
@@ -1087,10 +1217,11 @@ ${kinds}`;
     document.getElementById('mode').innerHTML = Store.mode() === 'cloud'
       ? `☁️ Sincronizado<br><small>${esc(Store.user()?.email || '')}</small>`
       : '💻 Modo local<br><small>dados só neste navegador</small>';
-    Store.subscribe(() => render());
+    Store.subscribe(() => { render(); agendarEstoque(); });
     Store.setErrorHandler(err => toast('⚠️ Erro ao salvar: ' + (err.message || err)));
     bindEvents();
     render(true);
+    agendarEstoque();
   }
 
   async function boot() {

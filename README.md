@@ -7,8 +7,8 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 | **Painel** | Resumo do dia: recados do mural, lista de compras, contas atrasadas ou próximas, remédios de hoje (com check), cardápio, tarefas e compromissos |
 | **Mural** | Recados rápidos entre vocês (“chego tarde hoje”), com opção de fixar no topo e marcar 👍 visto |
 | **Contas** | Contas mensais ou únicas, valor, vencimento, categoria, quem paga, forma de pagamento. Marca como paga e guarda a data e o valor pago |
-| **Remédios** | Remédio, para quem, dose, horários, como tomar, início e fim. Checklist diário de doses tomadas |
-| **Alimentação** | Cardápio fixo da semana (café, almoço, lanche e jantar) e observações da dieta |
+| **Remédios** | Remédios e suplementos de cada pessoa da família (abas por pessoa), dose, horários, como tomar, início e fim. Checklist diário de doses tomadas. Controle de estoque: o app desconta as doses de cada dia e, 7 dias antes de acabar, avisa no Painel e põe o item na lista da farmácia |
+| **Alimentação** | Cardápio fixo da semana (café, almoço, lanche e jantar) da família e de cada pessoa (o que ficar vazio usa o da família), suplementos de cada um e observações da dieta |
 | **Calendário** | Compromissos (com repetição semanal, mensal ou anual — bom para aniversários) e vencimentos das contas |
 | **Tarefas** | Tarefas únicas (com prazo) e rotinas que se repetem (todo dia, em dias da semana ou uma vez por mês), por cômodo e responsável |
 | **Listas** | Listas compartilhadas (compras, farmácia, casa…): um adiciona, o outro vê na hora no mercado; mostra quem adicionou |
@@ -113,7 +113,7 @@ supabase/schema.sql   tabela, segurança (RLS), tempo real e API para agentes
 mcp/server.js         conector MCP para o Claude (sem dependências)
 docs/AUTOMACAO.md     guia de automação, endpoints e prompts prontos
 integracoes/          scripts prontos: Google Agenda e Google Tarefas/compras, sem IA
-testes/               testes automáticos das integrações (node testes/<arquivo>)
+testes/               testes automáticos das regras e integrações (node testes/<arquivo>)
 ```
 
 ## Ideias para as próximas versões

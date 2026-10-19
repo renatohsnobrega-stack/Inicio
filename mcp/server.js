@@ -107,6 +107,11 @@ function resumo({ dias = 7 }) {
   const doses = D.dosesOn(hoje);
   out.push('', `Remédios hoje (${doses.filter(d => d.tomado).length}/${doses.length} tomados):`);
   doses.forEach(d => out.push(`- ${d.hora} ${d.med.nome}${d.med.dose ? ` ${d.med.dose}` : ''} — ${d.med.pessoa || ''} ${d.tomado ? '✔' : '○'}`));
+  const acabando = D.estoqueAcabando();
+  if (acabando.length) {
+    out.push('', `Estoque acabando (${acabando.length}):`);
+    acabando.forEach(({ med, est }) => out.push(`- ${med.nome} (${med.pessoa || ''}): restam ${D.fmtQtd(est.restante)} ${med.unidade || 'un.'}, dá para ${est.dias} dia(s)`));
+  }
 
   const eventos = D.eventsBetween(hoje, ate);
   out.push('', `Compromissos (${eventos.length}):`);

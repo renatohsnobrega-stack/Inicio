@@ -34,7 +34,8 @@ const Schema = (() => {
     remedio: {
       nome: 'Remédios', plural: 'remedios', icone: '💊',
       campos: {
-        nome: f('texto', 'Nome do remédio', true),
+        nome: f('texto', 'Nome do remédio ou suplemento', true),
+        categoria: f('"remedio" | "suplemento"', 'Suplementos também aparecem em Alimentação'),
         pessoa: f('texto', 'Para quem'),
         dose: f('texto', 'Dose (ex.: "1 comprimido 50mg")'),
         horarios: f('lista de "HH:MM"', 'Horários (ex.: ["08:00","20:00"])'),
@@ -42,8 +43,12 @@ const Schema = (() => {
         inicio: f('data AAAA-MM-DD', 'Início do tratamento'),
         fim: f('data AAAA-MM-DD', 'Fim do tratamento (vazio = uso contínuo)'),
         ativo: f('booleano', 'false = suspenso'),
+        estoque: f('número', 'Quantidade disponível na data "estoque_em" (vazio = não controlar)'),
+        unidade: f('texto', 'Unidade do estoque (comprimidos, cápsulas, ml…)'),
+        por_dose: f('número', 'Unidades gastas em cada horário (padrão 1)'),
+        estoque_em: f('data AAAA-MM-DD', 'Dia da contagem do estoque (vazio = hoje)'),
       },
-      exemplo: { nome: 'Losartana', pessoa: 'Renato', dose: '1 comprimido 50mg', horarios: ['08:00', '20:00'], instrucoes: 'após o café' },
+      exemplo: { nome: 'Losartana', pessoa: 'Renato', dose: '1 comprimido 50mg', horarios: ['08:00', '20:00'], instrucoes: 'após o café', estoque: 30, unidade: 'comprimidos', por_dose: 1 },
     },
     evento: {
       nome: 'Compromissos', plural: 'eventos', icone: '📅',
@@ -78,6 +83,7 @@ const Schema = (() => {
         dia: f('número 0-6', '0 = segunda … 6 = domingo', true),
         refeicao: f('"cafe" | "almoco" | "lanche" | "jantar"', 'Qual refeição', true),
         texto: f('texto', 'O que comer'),
+        pessoa: f('texto', 'De quem é a refeição (vazio = da família toda)'),
       },
       exemplo: { dia: 0, refeicao: 'almoco', texto: 'Arroz, feijão, frango grelhado e salada' },
     },
@@ -154,6 +160,16 @@ const Schema = (() => {
     const n = parseInt(v, 10);
     return isNaN(n) ? '' : Math.min(max, Math.max(min, n));
   };
+  // Quantidade ("28", "2,5", 30) → número >= 0; vazio continua vazio.
+  const toQtd = v => {
+    if (v == null || v === '') return '';
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+    return isNaN(n) ? '' : Math.max(0, n);
+  };
+  // "Antônio" → "antonio" (usado em ids, ex.: refeição de cada pessoa).
+  const slug = s => strip(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  // Refeição da família: "0-almoco"; de uma pessoa: "0-almoco-antonio".
+  const mealId = (wd, slot, pessoa) => (slug(pessoa) ? `${wd}-${slot}-${slug(pessoa)}` : `${wd}-${slot}`);
   const WD_PT = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
   const WD_EN = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   function toWeekday(v) {
@@ -218,11 +234,15 @@ const Schema = (() => {
         if (o.pagos && typeof o.pagos !== 'object') delete o.pagos;
         break;
       case 'remedio':
-        str('nome', 'pessoa', 'dose', 'instrucoes');
+        str('nome', 'pessoa', 'dose', 'instrucoes', 'unidade');
+        o.categoria = pickEnum(o.categoria, [[/supl|vitamin|suppl/, 'suplemento']], 'remedio');
         o.horarios = U.parseTimes(o.horarios || []);
         o.ativo = toBool(o.ativo, true);
         if (o.inicio) o.inicio = toYmd(o.inicio);
         if (o.fim) o.fim = toYmd(o.fim);
+        if ('estoque' in o) o.estoque = toQtd(o.estoque);
+        if ('por_dose' in o) o.por_dose = toQtd(o.por_dose);
+        if (o.estoque_em) o.estoque_em = toYmd(o.estoque_em);
         break;
       case 'evento':
         str('titulo', 'pessoa', 'local', 'obs');
@@ -239,10 +259,10 @@ const Schema = (() => {
         o.feito = toBool(o.feito, false);
         break;
       case 'refeicao': {
-        str('texto');
+        str('texto', 'pessoa');
         const wd = o.dia != null ? toWeekday(o.dia) : null;
         const slot = o.refeicao ? toSlot(o.refeicao) : null;
-        if (wd != null && slot) o.id = `${wd}-${slot}`;
+        if (wd != null && slot) o.id = mealId(wd, slot, o.pessoa);
         break;
       }
       case 'contato':
@@ -282,7 +302,7 @@ const Schema = (() => {
     const errs = Object.entries(def.campos).filter(([k, c]) => c.obrig && (o[k] === '' || o[k] == null)).map(([k]) => `falta "${k}"`);
     if (kind === 'conta' && o.tipo === 'unica' && !o.data) errs.push('conta única precisa de "data"');
     if (kind === 'conta' && o.tipo === 'mensal' && !o.dia) errs.push('conta mensal precisa de "dia"');
-    if (kind === 'refeicao' && !/^[0-6]-(cafe|almoco|lanche|jantar)$/.test(o.id)) errs.push('"dia" ou "refeicao" inválido');
+    if (kind === 'refeicao' && !/^[0-6]-(cafe|almoco|lanche|jantar)(-[a-z0-9-]+)?$/.test(o.id)) errs.push('"dia" ou "refeicao" inválido');
     if (kind === 'item' && !o.lista && !o.lista_nome) errs.push('informe "lista_nome"');
     return errs;
   }
@@ -290,10 +310,10 @@ const Schema = (() => {
   function resumo(kind, o) {
     switch (kind) {
       case 'conta': return `${o.nome} — ${U.brl(o.valor)} — ${o.tipo === 'unica' ? `vence ${U.fmtDate(o.data)}` : `todo dia ${o.dia}`}`;
-      case 'remedio': return `${o.nome}${o.dose ? ` (${o.dose})` : ''} — ${o.pessoa || '—'} — ${(o.horarios || []).join(', ') || 'sem horário'}`;
+      case 'remedio': return `${o.categoria === 'suplemento' ? 'Suplemento: ' : ''}${o.nome}${o.dose ? ` (${o.dose})` : ''} — ${o.pessoa || '—'} — ${(o.horarios || []).join(', ') || 'sem horário'}${o.estoque !== '' && o.estoque != null ? ` — estoque ${o.estoque}${o.unidade ? ' ' + o.unidade : ''}` : ''}`;
       case 'evento': return `${o.titulo} — ${U.fmtDate(o.data)}${o.hora ? ` às ${o.hora}` : ''}${o.repete && o.repete !== 'nao' ? ` (${o.repete})` : ''}`;
       case 'tarefa': return `${o.titulo} — ${{ unica: o.data ? `até ${U.fmtDate(o.data)}` : 'uma vez', diaria: 'todo dia', semanal: 'semanal', mensal: `todo dia ${o.dia}` }[o.tipo] || o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
-      case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}: ${o.texto || '—'}`; }
+      case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}${o.pessoa ? ` (${o.pessoa})` : ''}: ${o.texto || '—'}`; }
       case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}`;
       case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}`;
       case 'lista': return o.nome;
@@ -395,6 +415,6 @@ ${JSON.stringify(exemplo, null, 2)}
 
   return {
     CATEGORIAS, CATEG_CONTATO, SLOTS, KINDS, COMUNS, REVISAVEIS,
-    kindOf, normalize, validate, resumo, parseImport, parseICS, promptIA, hash, toYmd,
+    kindOf, normalize, validate, resumo, parseImport, parseICS, promptIA, hash, toYmd, slug, mealId,
   };
 })();
