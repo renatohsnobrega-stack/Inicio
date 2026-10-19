@@ -161,7 +161,19 @@ Content-Type: application/json
 |---|---|---|
 | `/rest/v1/rpc/agente_salvar` | `{"chave", "registros": [{"tipo", "id"?, "dados"}]}` | Cria ou atualiza (até 500 por chamada) |
 | `/rest/v1/rpc/agente_listar` | `{"chave", "tipo"?, "desde"?}` | Lista o que existe |
+| `/rest/v1/rpc/agente_pagar` | `{"chave", "id", "mes", "data"?, "valor"?}` | Marca a conta como paga no mês (`AAAA-MM` do vencimento) |
 | `/rest/v1/rpc/agente_remover` | `{"chave", "tipo", "id"}` | Remove um registro |
+
+### Chaves com acesso restrito
+Ao criar a chave (**Automação → API para agentes**), escolha o acesso:
+
+| Acesso | Pode | Não pode |
+|---|---|---|
+| **Total** | tudo acima | — |
+| **Só contas a pagar (sem apagar)** | listar, criar e editar contas; marcar como paga | ver remédios, recados, agenda, contatos e listas; remover qualquer coisa |
+
+Use **"Só contas a pagar"** para serviços de terceiros, como o Pierre. Tentativas fora do escopo são recusadas pelo banco
+(erro `esta chave só tem acesso a: conta`), não só pela tela.
 
 ```bash
 curl -X POST "https://SEU-PROJETO.supabase.co/rest/v1/rpc/agente_salvar" \
@@ -193,6 +205,21 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 | `contato` | **nome**, categoria, telefone, whatsapp, endereco, obs |
 | `recado` | **texto**, autor, fixado |
 | `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito |
+
+## Pierre (controle de gastos)
+
+O assistente do Pierre consegue manter as contas do app atualizadas a partir do Open Finance: faturas de cartão,
+parcelas e financiamentos, vencimentos recorrentes e marcar como pago quando o débito aparece no extrato.
+
+1. No app: **Automação → API para agentes**, nome **Pierre**, acesso **Só contas a pagar (sem apagar)** → **Criar chave**.
+2. Guarde a chave no **cofre do Pierre** (nunca no chat) e use **Copiar instruções para o agente** para passar o formato a ele.
+3. Ids estáveis sugeridos, para o Pierre atualizar em vez de duplicar:
+   - fatura de cartão: `pierre-fatura-<cartão>-<AAAA-MM>` (conta `"tipo": "unica"`, com `"data"` do vencimento)
+   - parcela ou financiamento: `pierre-<contrato>` (conta `"tipo": "mensal"`, `"dia"`, `"inicio"` e `"fim"` em `AAAA-MM`)
+4. Tudo que o Pierre criar aparece no Painel em **"para revisar"**; pagamentos marcados por ele ficam com `"por": "agente"`.
+
+Para perguntas pontuais ("quanto gastamos com mercado?"), use o MCP do próprio Pierre no Claude:
+`claude mcp add --scope user --transport http pierre https://pierre.finance/mcp --header "Authorization: Bearer SUA_CHAVE"`.
 
 ---
 

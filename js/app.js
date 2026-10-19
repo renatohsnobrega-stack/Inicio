@@ -344,16 +344,23 @@
 
     const chaves = state.chaves;
     const apiPanel = cloud ? `
-        <p class="muted">Crie uma chave para cada agente (ex.: “Claude – e-mails”, “Manus”). Se algo sair do controle, revogue a chave e pronto.</p>
-        <form class="quick-add" data-form="nova-chave"><input name="nome" placeholder="Nome do agente (ex.: Claude – contas do Gmail)">
+        <p class="muted">Crie uma chave para cada agente (ex.: “Claude – e-mails”, “Pierre”). Se algo sair do controle, revogue a chave e pronto.
+          Para serviços de terceiros, prefira <b>“Só contas a pagar”</b>: a chave não enxerga remédios, recados nem agenda e não apaga nada.</p>
+        <form class="quick-add key-form" data-form="nova-chave"><input name="nome" placeholder="Nome do agente (ex.: Pierre)" aria-label="Nome do agente">
+          <select name="escopo" aria-label="Acesso da chave">
+            <option value="total">Acesso total</option>
+            <option value="contas">Só contas a pagar (sem apagar)</option>
+          </select>
           <button class="btn primary" type="submit">Criar chave</button></form>
         ${state.novaChave ? `<div class="secret"><p><b>Copie agora — esta chave não será mostrada de novo:</b></p>
           <code>${esc(state.novaChave)}</code>
           <div class="actions">${btn('📋 Copiar chave', 'copy', `data-text="${esc(state.novaChave)}"`, 'small primary')}
           ${btn('📋 Copiar instruções para o agente', 'copy-agent-guide', '', 'small')}</div></div>` : ''}
         ${chaves == null ? btn('Ver chaves existentes', 'load-keys', '', 'small') : chaves.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Agente</th><th>Chave</th><th>Último uso</th><th></th></tr></thead><tbody>
-          ${chaves.map(c => `<tr class="${c.revogada ? 'muted' : ''}"><td>${esc(c.nome)}</td><td><code>${esc(c.prefixo)}…</code></td>
+          <thead><tr><th>Agente</th><th>Acesso</th><th>Chave</th><th>Último uso</th><th></th></tr></thead><tbody>
+          ${chaves.map(c => `<tr class="${c.revogada ? 'muted' : ''}"><td>${esc(c.nome)}</td>
+            <td>${c.tipos ? `Só ${esc(c.tipos.map(t => Schema.KINDS[t]?.nome || t).join(', ').toLowerCase())}${c.pode_remover === false ? ', sem apagar' : ''}` : 'Total'}</td>
+            <td><code>${esc(c.prefixo)}…</code></td>
             <td>${c.ultimo_uso ? U.timeAgo(c.ultimo_uso) : 'nunca'}</td>
             <td>${c.revogada ? 'revogada' : btn('Revogar', 'revoke-key', `data-id="${esc(c.id)}"`, 'small danger')}</td></tr>`).join('')}
           </tbody></table></div>` : emptyMsg('Nenhuma chave criada.')}
@@ -397,7 +404,8 @@
   function agentGuide(chave) {
     const cfg = Store.config();
     const base = `${String(cfg.supabaseUrl || 'https://SEU-PROJETO.supabase.co').replace(/\/$/, '')}/rest/v1/rpc`;
-    const kinds = Object.entries(Schema.KINDS).map(([k, d]) => `- ${k}: ${Object.entries(d.campos).map(([c, x]) => `${c}${x.obrig ? '*' : ''} (${x.tipo})`).join(', ')}`).join('\n');
+    const restrita = state.novaChaveEscopo === 'contas';
+    const kinds = Object.entries(Schema.KINDS).filter(([k]) => !restrita || k === 'conta').map(([k, d]) => `- ${k}: ${Object.entries(d.campos).map(([c, x]) => `${c}${x.obrig ? '*' : ''} (${x.tipo})`).join(', ')}`).join('\n');
     return `API do app "Casa Organizada" (organização da casa).
 
 Cabeçalhos em todas as chamadas:
@@ -417,10 +425,14 @@ POST ${base}/agente_salvar
 POST ${base}/agente_listar
 {"chave": "${chave}", "tipo": "conta"}   (tipo e "desde" são opcionais)
 
-3) Remover
+3) Marcar uma conta como paga (no mês do vencimento; data e valor opcionais)
+POST ${base}/agente_pagar
+{"chave": "${chave}", "id": "<id da conta>", "mes": "2026-10", "data": "2026-10-09", "valor": 287.45}
+
+4) Remover${restrita ? ' (não permitido para esta chave)' : ''}
 POST ${base}/agente_remover
 {"chave": "${chave}", "tipo": "conta", "id": "..."}
-
+${restrita ? '\nESTA CHAVE SÓ ACESSA CONTAS A PAGAR ("tipo": "conta") E NÃO PODE REMOVER.\n' : ''}
 Tipos e campos (* = obrigatório). Datas AAAA-MM-DD, horas HH:MM, dias da semana 0=segunda…6=domingo:
 ${kinds}`;
   }
@@ -1012,7 +1024,12 @@ ${kinds}`;
       if (form.dataset.form === 'nova-chave') {
         e.preventDefault();
         try {
-          state.novaChave = await Store.rpc('criar_chave_api', { p_nome: new FormData(form).get('nome') });
+          const f = new FormData(form);
+          const soContas = f.get('escopo') === 'contas';
+          state.novaChave = await Store.rpc('criar_chave_api', {
+            p_nome: f.get('nome'), p_tipos: soContas ? ['conta'] : null, p_pode_remover: !soContas,
+          });
+          state.novaChaveEscopo = soContas ? 'contas' : 'total';
           state.chaves = await Store.rpc('listar_chaves_api');
         } catch (err) {
           alert('Não foi possível criar a chave: ' + err.message + '\n\nVocê executou a versão mais recente do supabase/schema.sql?');
