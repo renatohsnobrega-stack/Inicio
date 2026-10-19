@@ -36,8 +36,9 @@ const D = (() => {
 
   // ---------- Listas ----------
   const listas = () => Store.list('lista').sort((a, b) => (a.criadaEm || '').localeCompare(b.criadaEm || ''));
+  // Pendentes primeiro; entre eles, os com prazo (mais urgente antes) e depois os sem prazo.
   const itensDa = id => Store.list('item').filter(i => i.lista === id)
-    .sort((a, b) => a.feito - b.feito || (a.criadoEm || '').localeCompare(b.criadoEm || ''));
+    .sort((a, b) => a.feito - b.feito || (a.prazo || '9').localeCompare(b.prazo || '9') || (a.criadoEm || '').localeCompare(b.criadoEm || ''));
 
   // ---------- Contatos ----------
   const contatos = () => Store.list('contato').sort((a, b) => a.nome.localeCompare(b.nome));
@@ -216,6 +217,45 @@ const D = (() => {
       .map(t => ({ tarefa: t, date, feito: taskDone(t, date) }))
       .sort((a, b) => a.feito - b.feito || a.tarefa.titulo.localeCompare(b.tarefa.titulo));
   }
+  // ---------- Pendências por prazo (tarefas + itens de lista com prazo) ----------
+  const FAIXAS = [
+    { id: 'atrasado', nome: 'Atrasado' }, { id: 'hoje', nome: 'Hoje' }, { id: 'semana', nome: 'Próximos 7 dias' },
+    { id: 'depois', nome: 'Depois' }, { id: 'sem', nome: 'Sem prazo' },
+  ];
+  function faixaDe(data, hoje = U.today()) {
+    if (!data) return 'sem';
+    if (data < hoje) return 'atrasado';
+    if (data === hoje) return 'hoje';
+    return data <= U.ymd(U.addDays(U.parseYmd(hoje), 7)) ? 'semana' : 'depois';
+  }
+  const ehDe = (quem, pessoa) => !pessoa || !quem || quem === pessoa || quem === 'Ambos';
+  // Tudo o que está por fazer, cada coisa com a sua faixa de prazo. Rotinas entram só no dia em que caem.
+  // O que foi concluído hoje continua aparecendo (riscado) para dar a sensação de progresso.
+  function pendencias(hoje = U.today(), pessoa = '') {
+    const out = [];
+    for (const t of Store.list('tarefa')) {
+      if (!ehDe(t.responsavel, pessoa)) continue;
+      if (isRecorrente(t)) {
+        if (taskApplies(t, hoje)) out.push({ kind: 'tarefa', obj: t, titulo: t.titulo, data: hoje, feito: taskDone(t, hoje), quem: t.responsavel, recorrente: true });
+        continue;
+      }
+      if (t.feito && t.feitoEm !== hoje) continue;
+      out.push({ kind: 'tarefa', obj: t, titulo: t.titulo, data: t.data || '', feito: !!t.feito, quem: t.responsavel });
+    }
+    const nomes = Object.fromEntries(listas().map(l => [l.id, l]));
+    for (const i of Store.list('item')) {
+      if (!i.prazo || (i.feito && i.feitoEm !== hoje)) continue;
+      out.push({ kind: 'item', obj: i, titulo: i.texto, data: i.prazo, feito: !!i.feito, lista: nomes[i.lista] });
+    }
+    return out.map(p => ({ ...p, faixa: faixaDe(p.data, hoje) }))
+      .sort((a, b) => a.feito - b.feito || (a.data || '9').localeCompare(b.data || '9') || a.titulo.localeCompare(b.titulo));
+  }
+  // Foco do dia: até 3 coisas por pessoa. Fica no próprio registro ({ foco: { Renato: '2026-10-19' } })
+  // e vale só para aquele dia; amanhã a lista começa vazia.
+  const FOCO_MAX = 3;
+  const emFoco = (o, pessoa, hoje = U.today()) => (o.foco || {})[pessoa || 'casa'] === hoje;
+  const focoDe = (pessoa, hoje = U.today()) => pendencias(hoje).filter(p => emFoco(p.obj, pessoa, hoje));
+
   function freqLabel(t) {
     switch (t.tipo) {
       case 'diaria': return 'Todo dia';
@@ -235,5 +275,6 @@ const D = (() => {
     mealId, mealOwn, meal, mealResumo, suplementosDe,
     occursOn, eventsOn, eventsBetween,
     isRecorrente, taskApplies, taskDone, tasksOn, freqLabel,
+    FAIXAS, faixaDe, pendencias, FOCO_MAX, emFoco, focoDe,
   };
 })();

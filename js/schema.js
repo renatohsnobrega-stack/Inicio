@@ -120,6 +120,7 @@ const Schema = (() => {
         lista_nome: f('texto', 'Nome da lista (ex.: "Compras"); é criada se não existir'),
         lista: f('texto', 'Ou o id da lista'),
         feito: f('booleano', 'Já comprado/resolvido'),
+        prazo: f('data AAAA-MM-DD', 'Até quando precisa ser comprado/resolvido (opcional)'),
       },
       exemplo: { texto: '2 L de leite', lista_nome: 'Compras' },
     },
@@ -279,6 +280,7 @@ const Schema = (() => {
       case 'item':
         str('texto', 'lista', 'lista_nome');
         o.feito = toBool(o.feito, false);
+        if (o.prazo) o.prazo = toYmd(o.prazo);
         if (!o.criadoEm) o.criadoEm = new Date().toISOString();
         break;
       case 'lista':
@@ -315,7 +317,7 @@ const Schema = (() => {
       case 'tarefa': return `${o.titulo} — ${{ unica: o.data ? `até ${U.fmtDate(o.data)}` : 'uma vez', diaria: 'todo dia', semanal: 'semanal', mensal: `todo dia ${o.dia}` }[o.tipo] || o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
       case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}${o.pessoa ? ` (${o.pessoa})` : ''}: ${o.texto || '—'}`; }
       case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}`;
-      case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}`;
+      case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}${o.prazo ? ` (até ${U.fmtDate(o.prazo)})` : ''}`;
       case 'lista': return o.nome;
       default: return o.texto || o.nome || o.titulo || o.id;
     }

@@ -3,7 +3,7 @@
  *
  * Duas listas do Google Tarefas ficam espelhadas no app:
  *  - "Casa"    ⇄ Tarefas avulsas do app (as de "Uma vez"; rotinas que se repetem ficam só no app)
- *  - "Compras" ⇄ Listas → Compras do app
+ *  - "Compras" ⇄ Listas → Compras do app (com o prazo do item na data do Google)
  * Criar, editar, concluir ou apagar num lado reflete no outro a cada 15 minutos.
  *
  * Como usar (uma vez só, uns 5 minutos):
@@ -72,10 +72,11 @@ function parCompras() {
     doApp: () => listarApp('item').filter(r => r.dados.lista === listaApp),
     paraApp: (g, id) => ({
       tipo: 'item', id,
-      dados: { texto: g.title, lista: listaApp, feito: g.status === 'completed', origem: 'google-tarefas' },
+      dados: { texto: g.title, lista: listaApp, prazo: g.due ? g.due.slice(0, 10) : '', feito: g.status === 'completed', origem: 'google-tarefas' },
     }),
     paraGoogle: d => ({
       title: d.texto || '(sem nome)',
+      due: d.prazo ? d.prazo + 'T00:00:00.000Z' : null,
       status: d.feito ? 'completed' : 'needsAction',
       completed: d.feito ? undefined : null,
     }),
