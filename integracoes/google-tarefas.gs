@@ -15,6 +15,10 @@
  *
  * Em conflito (a mesma tarefa mudou nos dois lados entre duas sincronizações), vale a
  * alteração mais recente. "Excluir tarefas concluídas" no Google também tira do app.
+ *
+ * Tarefas atribuídas a você por outra pessoa (Google Chat, Docs) também entram no app.
+ * Quem faz: as atribuídas a você e as de "Minhas tarefas" ficam com DONO_DA_CONTA; nas outras
+ * listas, o nome escrito no título ou na descrição (PESSOAS). Escolher outro no app não é desfeito.
  */
 const CONFIG = {
   SUPABASE_URL: 'https://SEU-PROJETO.supabase.co',
@@ -25,9 +29,14 @@ const CONFIG = {
   LISTAS_TAREFAS: ['Casa', 'Minhas tarefas'],
   LISTA_COMPRAS: 'Compras',   // nome da lista no Google Tarefas ('' para não sincronizar)
   LISTA_COMPRAS_APP: 'Compras', // nome da lista no app
+  PESSOAS: ['Renato', 'Vanessa'], // nomes procurados no título/descrição para saber quem faz
+  DONO_DA_CONTA: 'Renato',        // dono desta conta Google: recebe as atribuídas e as de "Minhas tarefas"
 };
 
 const PREFIXO = 'gtasks-';
+// Para quem atualiza só o código e mantém um CONFIG antigo, sem PESSOAS / DONO_DA_CONTA.
+const PESSOAS = CONFIG.PESSOAS || ['Renato', 'Vanessa'];
+const DONO_DA_CONTA = CONFIG.DONO_DA_CONTA != null ? CONFIG.DONO_DA_CONTA : 'Renato';
 
 function sincronizarTarefas() {
   const trava = LockService.getScriptLock();
@@ -53,6 +62,17 @@ function listaDaTarefa(d) {
   return nomes.find(x => x.toLowerCase() === n) || nomes[0];
 }
 
+// Quem faz a tarefa do Google: o dono da conta, se ela foi atribuída a ele (Chat, Docs) ou está
+// em "Minhas tarefas" (lista pessoal: um nome ali costuma ser com quem falar, não quem faz).
+// Nas outras listas, o único nome de PESSOAS citado no título ou na descrição.
+function responsavelDe(g, listaGoogle) {
+  const dono = DONO_DA_CONTA;
+  if (dono && (g.assignmentInfo || /^(minhas tarefas|my tasks)$/i.test(listaGoogle))) return dono;
+  const texto = (g.title || '') + '\n' + (g.notes || '');
+  const citados = PESSOAS.filter(n => new RegExp('(^|[^\\p{L}])' + n + '($|[^\\p{L}])', 'iu').test(texto));
+  return citados.length === 1 ? citados[0] : citados.length > 1 ? 'Ambos' : '';
+}
+
 function parTarefas(listaGoogle, principal) {
   return {
     // A primeira lista mantém o nome antigo para não perder o estado já gravado.
@@ -70,6 +90,11 @@ function parTarefas(listaGoogle, principal) {
         origem: 'google-tarefas', revisado: true,
       },
     }),
+    // Só preenche quem faz quando o app ainda não tem (escolha feita no app nunca é desfeita).
+    completar: (a, g) => {
+      const quem = !a.dados.responsavel && responsavelDe(g, listaGoogle);
+      return quem ? { tipo: 'tarefa', id: a.id, dados: { responsavel: quem } } : null;
+    },
     paraGoogle: d => ({
       title: d.titulo || '(sem título)', notes: d.obs || '',
       due: d.data ? d.data + 'T00:00:00.000Z' : null,
@@ -122,15 +147,17 @@ function sincronizarPar(par) {
     const g = google[e.g];
     ligados.add(e.g);
     if (!a && !vivo(g)) return;                                       // sumiu dos dois lados
-    if (!a) { Tasks.Tasks.remove(listaId, e.g); return; }             // apagado no app
+    if (!a) { noGoogle(() => Tasks.Tasks.remove(listaId, e.g)); return; } // apagado no app
     if (!vivo(g)) { removerApp.push(appId); return; }                 // apagado/limpo no Google
     const mudouApp = a.atualizado_em !== e.a;
     const mudouGoogle = g.updated !== e.gs;
     if (mudouGoogle && (!mudouApp || quando(g.updated) > quando(a.atualizado_em))) {
       salvar.push(par.paraApp(g, appId));
     } else if (mudouApp) {
-      Tasks.Tasks.patch(par.paraGoogle(a.dados), listaId, g.id);
+      noGoogle(() => Tasks.Tasks.patch(par.paraGoogle(a.dados), listaId, g.id));
     }
+    const c = par.completar && par.completar(a, g);
+    if (c) salvar.push(c);
     novo[appId] = { g: g.id };
   });
 
@@ -158,7 +185,9 @@ function sincronizarPar(par) {
   Object.keys(google).forEach(gid => {
     if (ligados.has(gid) || !vivo(google[gid])) return;
     const appId = PREFIXO + gid;
-    salvar.push(par.paraApp(google[gid], appId));
+    const r = par.paraApp(google[gid], appId);
+    if (par.completar) { const c = par.completar({ id: appId, dados: {} }, google[gid]); if (c) Object.assign(r.dados, c.dados); }
+    salvar.push(r);
     novo[appId] = { g: gid };
   });
 
@@ -189,15 +218,27 @@ function listaDoGoogle(nome) {
   return Tasks.Tasklists.insert({ title: nome }).id;
 }
 
+// Lido direto da API REST para pedir showAssigned: sem ele, as tarefas atribuídas a você
+// por outra pessoa (Google Chat, Docs) não vêm, embora apareçam em "Minhas tarefas".
 function tarefasDoGoogle(listaId) {
   const out = [];
   let pageToken;
   do {
-    const r = Tasks.Tasks.list(listaId, { showCompleted: true, showHidden: true, showDeleted: true, maxResults: 100, pageToken });
+    const url = 'https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listaId) + '/tasks'
+      + '?showCompleted=true&showHidden=true&showDeleted=true&showAssigned=true&maxResults=100'
+      + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+    const resp = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (resp.getResponseCode() >= 300) throw new Error('Google Tarefas falhou (' + resp.getResponseCode() + '): ' + resp.getContentText());
+    const r = JSON.parse(resp.getContentText());
     (r.items || []).forEach(t => out.push(t));
     pageToken = r.nextPageToken;
   } while (pageToken);
   return out;
+}
+
+// Uma escrita recusada pelo Google (ex.: tarefa atribuída por outra pessoa) não para o resto.
+function noGoogle(fn) {
+  try { return fn(); } catch (e) { console.log('Google recusou: ' + e.message); return null; }
 }
 
 // ---------- App (API para agentes) ----------

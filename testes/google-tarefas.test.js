@@ -30,7 +30,8 @@ const listas = []; const tarefas = {}; let seq = 0; let chamadasGoogle = 0;
 const Tasks = {
   Tasklists: { list: () => ({ items: listas }), get: id => (id === '@default' ? listas[0] : listas.find(l => l.id === id)), insert: l => { const n = { id: 'L' + (++seq), title: l.title }; listas.push(n); tarefas[n.id] = []; return n; } },
   Tasks: {
-    list: (lid) => ({ items: tarefas[lid].map(t => ({ ...t })) }),
+    // Como no Google real: tarefas atribuídas por outra pessoa (Chat, Docs) só vêm com showAssigned.
+    list: (lid, o = {}) => ({ items: tarefas[lid].filter(t => o.showAssigned || !t.assignmentInfo).map(t => ({ ...t })) }),
     insert: (t, lid) => { chamadasGoogle++; const n = { id: 'T' + (++seq), status: 'needsAction', ...limpa(t), updated: agora() }; tarefas[lid].push(n); return n; },
     patch: (t, lid, id) => { chamadasGoogle++; const x = tarefas[lid].find(y => y.id === id); Object.assign(x, limpa(t), { updated: agora() }); if (t.completed === null) delete x.completed; return x; },
     remove: (lid, id) => { chamadasGoogle++; const x = tarefas[lid].find(y => y.id === id); x.deleted = true; x.updated = agora(); },
@@ -51,8 +52,14 @@ const ctx = vm.createContext({
   console: { log: m => process.env.V && console.log('   ' + m) },
   Tasks, LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
-  UrlFetchApp: { fetch: (url, o) => { chamadasApp++; const out = api[url.split('/').pop()](JSON.parse(o.payload)); return { getContentText: () => JSON.stringify(out), getResponseCode: () => 200 }; } },
-  ScriptApp: { getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
+  UrlFetchApp: { fetch: (url, o) => {
+    if (url.startsWith('https://tasks.googleapis.com/')) {
+      const u = new URL(url), lid = decodeURIComponent(u.pathname.split('/')[4]);
+      const out = Tasks.Tasks.list(lid, { showAssigned: u.searchParams.get('showAssigned') === 'true' });
+      return { getContentText: () => JSON.stringify(out), getResponseCode: () => 200 };
+    }
+    chamadasApp++; const out = api[url.split('/').pop()](JSON.parse(o.payload)); return { getContentText: () => JSON.stringify(out), getResponseCode: () => 200 }; } },
+  ScriptApp: { getOAuthToken: () => 'token', getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
 });
 vm.runInContext(fs.readFileSync(process.argv[2] || require('path').join(__dirname, '..', 'integracoes', 'google-tarefas.gs'), 'utf8'), ctx);
 const sync = () => vm.runInContext('sincronizarTarefas()', ctx);
@@ -137,3 +144,37 @@ ok(appList('tarefa').some(t => t.titulo === 'Revisar seguro' && t.lista_google =
 const gM = chamadasGoogle, nM = appList('tarefa').length;
 sync();
 ok(chamadasGoogle === gM && appList('tarefa').length === nM && gVivas('Casa').length + gVivas('My Tasks').length === nM - 1, '12ª: sem mudanças: nada escrito, nada duplicado entre as listas');
+
+// ---- Quem faz e tarefas atribuídas pelo Google Chat ----
+const chat = { surfaceType: 'SPACE', linkToTask: 'https://chat.google.com/x', spaceInfo: { space: 'spaces/AAA' } };
+gAdd('My Tasks', { title: 'Assinar laudo STIHL', assignmentInfo: chat, due: '2026-10-21T00:00:00.000Z' });
+gAdd('My Tasks', { title: 'Retornar ligação', notes: 'Ligar para a Vanessa' });
+gAdd('Casa', { title: 'Levar o carro', notes: 'Vanessa' });
+gAdd('Casa', { title: 'Consertar torneira' });
+gAdd('Casa', { title: 'Buscar exames', notes: 'Responsável: Renato' });
+sync();
+const tarefa = t => appList('tarefa').find(x => x.titulo === t);
+ok(tarefa('Assinar laudo STIHL') && tarefa('Assinar laudo STIHL').data === '2026-10-21', '13ª: tarefa atribuída pelo Google Chat entrou no app');
+ok(tarefa('Assinar laudo STIHL').responsavel === 'Renato', '13ª: atribuída a mim ficou com o Renato (não aparece para a Vanessa)');
+ok(tarefa('Retornar ligação').responsavel === 'Renato', '13ª: em "Minhas tarefas", nome na descrição (com quem falar) não muda quem faz');
+ok(tarefa('Levar o carro').responsavel === 'Vanessa', '13ª: na Casa, o nome na descrição define quem faz');
+ok(!tarefa('Consertar torneira').responsavel, '13ª: tarefa da Casa sem nome continua dos dois');
+ok(tarefa('Buscar exames').responsavel === 'Renato', '13ª: "Renato" na descrição de uma tarefa da Casa ficou com o Renato');
+
+// Tarefas que já estavam no app sem responsável são completadas; escolha feita no app é mantida.
+const rev = tarefa('Revisar seguro');
+appSet('tarefa', rev.id, { ...rev, responsavel: undefined });
+appSet('tarefa', 'a1', { ...appGet('tarefa', 'a1'), responsavel: 'Ambos' });
+const lig = tarefa('Assinar laudo STIHL'); appSet('tarefa', lig.id, { ...lig, responsavel: 'Vanessa' });
+sync();
+ok(tarefa('Revisar seguro').responsavel === 'Renato', '14ª: tarefa antiga de "Minhas tarefas" sem responsável passou para o Renato');
+ok(appGet('tarefa', 'a1').responsavel === 'Ambos' && tarefa('Assinar laudo STIHL').responsavel === 'Vanessa', '14ª: responsável escolhido no app não foi trocado');
+
+// O Google pode recusar escrita numa tarefa atribuída; o resto da sincronização segue.
+const patchOrig = Tasks.Tasks.patch;
+Tasks.Tasks.patch = (t, lid, id) => { if (tarefas[lid].find(y => y.id === id).assignmentInfo) throw new Error('403'); return patchOrig(t, lid, id); };
+appSet('tarefa', lig.id, { ...appGet('tarefa', lig.id), feito: true });
+appSet('tarefa', 'a1', { ...appGet('tarefa', 'a1'), titulo: 'Marcar dentista (de novo)' });
+sync();
+Tasks.Tasks.patch = patchOrig;
+ok(gVivas('Casa').some(t => t.title === 'Marcar dentista (de novo)'), '15ª: recusa do Google numa tarefa atribuída não travou as outras');
