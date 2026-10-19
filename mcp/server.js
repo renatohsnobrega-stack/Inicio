@@ -27,7 +27,7 @@ const ctx = vm.createContext({
     get: (kind, id) => cache[kind]?.[id],
   },
 });
-for (const f of ['util.js', 'schema.js', 'domain.js']) {
+for (const f of ['util.js', 'schema.js', 'caderneta.js', 'domain.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), ctx, { filename: f });
 }
 const U = vm.runInContext('U', ctx);

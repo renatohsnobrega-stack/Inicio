@@ -14,13 +14,14 @@
     tarPessoa: null,  // aba de Tarefas ('' = todos; null = escolher pelo dono do aparelho)
     novaQuando: 'hoje', // prazo escolhido por último no "adicionar rápido" de tarefas
     faixasAbertas: { atrasado: true, hoje: true, semana: true, depois: false, sem: false },
+    filho: '',        // aba da página Filhos
     aliPessoa: null,  // aba de Alimentação ('' = família; null = escolher pelo dono do aparelho)
     print: { sheet: 'dia', date: U.today(), week: U.ymd(U.startOfWeek(new Date())), month: U.thisMonth(), pessoa: '' },
   };
 
   const NAV = [
     ['painel', 'Painel', '🏠'], ['mural', 'Mural', '📌'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
-    ['alimentacao', 'Alimentação', '🍽️'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
+    ['alimentacao', 'Alimentação', '🍽️'], ['filhos', 'Filhos', '👶'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
     ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['aniversarios', 'Aniversários', '🎂'], ['imprimir', 'Imprimir', '🖨️'],
     ['automacao', 'Automação', '🤖'], ['ajustes', 'Ajustes', '⚙️'],
   ];
@@ -486,6 +487,115 @@
       ${semData.length ? `<p class="muted small">${semData.length} ${semData.length === 1 ? 'contato está' : 'contatos estão'} sem data de aniversário.</p>` : ''}`;
   }
 
+  // ---------- Filhos ----------
+  const MARCO_ST = [['P', 'Presente'], ['A', 'Ausente'], ['NV', 'Não verificado']];
+  const marcoRow = (c, m) => {
+    const st = D.marcoDe(c.id, m.id);
+    return `<div class="row marco ${st?.s === 'A' ? 'status-atrasada' : ''}">
+      <span class="grow"><strong>${st?.s === 'P' ? '✔ ' : ''}${esc(m.nome)}</strong>
+        <details><summary>Como observar</summary><small>${esc(m.como)}</small></details>
+        ${st?.em ? `<small>${esc(MARCO_ST.find(([v]) => v === st.s)?.[1] || '')} · marcado em ${U.fmtDate(st.em)}</small>` : ''}</span>
+      <span class="seg">${MARCO_ST.map(([v, label]) => btn(v, 'set-marco',
+        `data-crianca="${esc(c.id)}" data-marco="${esc(m.id)}" data-s="${v}" title="${label}" aria-pressed="${st?.s === v}"`,
+        `small ${st?.s === v ? (v === 'A' ? 'danger' : 'primary') : ''}`)).join('')}</span></div>`;
+  };
+  const faixaBloco = (c, f, titulo) => `<h3 class="sub">${titulo} · ${esc(f.nome)}</h3>${f.marcos.map(m => marcoRow(c, m)).join('')}`;
+  const dado = (rotulo, valor) => (valor === '' || valor == null ? '' : `<dt>${rotulo}</dt><dd>${valor}</dd>`);
+  // "7m 9d", "2a 3m" (tabela de medidas)
+  const idadeCurta = i => (!i ? '—' : i.meses < 24 ? `${i.meses}m ${i.dias}d` : `${Math.floor(i.meses / 12)}a ${i.meses % 12}m`);
+  const num = (v, casas = 1) => String(Math.round(Number(v) * 10 ** casas) / 10 ** casas).replace('.', ',');
+
+  function filhos() {
+    const lista = D.filhos();
+    if (!lista.length) {
+      return pageHead('Filhos', '') + emptyMsg('Em <a href="#/ajustes">Ajustes</a>, escreva o nome do filho em “Quem é filho”.');
+    }
+    const nome = lista.includes(state.filho) ? state.filho : lista[0];
+    const c = D.crianca(nome);
+    const t = U.today();
+    const idade = D.idadeCrianca(c, t);
+    const faixa = D.faixaMarcos(idade?.usada);
+    const anterior = faixa ? Caderneta.FAIXAS[faixa.i - 1] : null;
+    const atencao = D.marcosAtencao(c, t);
+    const semMarcar = D.marcosSemMarcar(c, t);
+    const consultas = D.consultasRecomendadas(c);
+    const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 180))).filter(({ ev }) => ev.pessoa === nome);
+    const remedios = Store.list('remedio').filter(m => m.pessoa === nome && D.medActiveOn(m, t))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+    const medidas = D.medidasDe(c.id);
+    const historia = D.historiaDe(c.id);
+    const ig = Number(c.ig_semanas) ? `${c.ig_semanas} semanas${Number(c.ig_dias) ? ` e ${c.ig_dias} dias` : ''}` : '';
+    const fonte = `<p class="muted small">Fonte: <a href="${Caderneta.URL}" target="_blank" rel="noopener">${esc(Caderneta.FONTE)}</a>.</p>`;
+
+    const tabs = lista.length > 1 ? `<div class="tabs">${lista.map(p => `<button type="button" class="tab ${p === nome ? 'active' : ''}"
+      data-action="pick-filho" data-pessoa="${esc(p)}">${esc(p)}</button>`).join('')}</div>` : '';
+
+    const nascimento = c.nascimento ? `<dl class="dados">
+        ${dado('Nascimento', U.fmtDate(c.nascimento))}
+        ${dado('Idade', esc(D.idadeTxt(idade?.real)))}
+        ${idade?.corrigida ? dado('Idade corrigida', `${esc(D.idadeTxt(idade.corrigida))} <small class="muted">(prematuro: usada nos marcos)</small>`) : ''}
+        ${dado('Idade gestacional', esc(ig))}
+        ${dado('Peso ao nascer', c.peso_nascer ? `${esc(c.peso_nascer)} g` : '')}
+        ${dado('Comprimento', c.comprimento_nascer ? `${num(c.comprimento_nascer)} cm` : '')}
+        ${dado('Perímetro cefálico', c.pc_nascer ? `${num(c.pc_nascer)} cm` : '')}
+        ${dado('Tipo sanguíneo', esc(c.tipo_sanguineo))}
+        ${dado('Alergias', esc(c.alergias))}
+        ${dado('Observações', c.obs ? U.nl2br(c.obs) : '')}</dl>`
+      : `<p class="muted">Coloque a data de nascimento para o app calcular a idade, os marcos e as consultas da Caderneta.</p>`;
+
+    const marcos = !c.nascimento ? emptyMsg('Preencha a data de nascimento.')
+      : !faixa ? emptyMsg('Os marcos da Caderneta vão até os 6 anos.')
+      : `<p class="muted small">Faixa pela idade${idade.corrigida ? ' corrigida' : ''}: <b>${esc(faixa.nome)}</b>. Ao final da faixa, a criança deve ter atingido os 4 marcos.
+          Toque em <b>P</b> (presente), <b>A</b> (ausente) ou <b>NV</b> (não verificado).</p>
+        ${atencao.length ? `<div class="alerta"><b>Para conversar com o pediatra:</b> ${atencao.map(x => `${esc(x.marco.nome)} <span class="muted">(faixa ${esc(x.faixa.nome)})</span>`).join('; ')}.
+          <small>Marcado como ausente. Quem avalia o desenvolvimento é o profissional, com o instrumento da Caderneta (p. 79 e 80).</small></div>` : ''}
+        ${semMarcar.length ? `<p class="muted small">Faltam marcar ${semMarcar.length} ${semMarcar.length === 1 ? 'marco' : 'marcos'} da faixa anterior.</p>` : ''}
+        ${faixaBloco(c, faixa, 'Faixa atual')}
+        ${anterior ? faixaBloco(c, anterior, 'Faixa anterior') : ''}
+        <details class="todas"><summary>Todas as faixas (nascimento a 6 anos)</summary>
+          ${Caderneta.FAIXAS.filter(f => f !== faixa && f !== anterior).map(f => faixaBloco(c, f, f.ini < faixa.ini ? 'Já passou' : 'Próxima')).join('')}</details>
+        ${fonte}`;
+
+    const consultaRow = x => {
+      const passou = x.data < t;
+      const ag = x.evento;
+      return `<div class="row ${ag ? '' : passou ? 'muted-row' : ''}">
+        <span class="date">${U.fmtDay(x.data)}</span>
+        <span class="grow"><strong>Consulta ${esc(x.nome)}</strong><small>${ag ? `agendada para ${U.fmtDate(ag.data)}${ag.hora ? ` às ${esc(ag.hora)}` : ''}` : passou ? 'data já passou' : `por volta de ${U.fmtDate(x.data)}`}</small></span>
+        ${ag ? btn('✎', 'edit-event', `data-id="${esc(ag.id)}" aria-label="Editar"`, 'small ghost')
+          : passou ? '' : btn('Agendar', 'agendar-consulta', `data-pessoa="${esc(nome)}" data-nome="${esc(x.nome)}" data-date="${x.data}"`, 'small')}</div>`;
+    };
+    const proximas = consultas.filter(x => x.evento || x.data >= U.ymd(U.addDays(U.parseYmd(t), -30)));
+
+    return pageHead(`👶 ${esc(nome)}`, idade ? `${esc(D.idadeTxt(idade.real))}${idade.corrigida ? ` · idade corrigida ${esc(D.idadeTxt(idade.corrigida))}` : ''}` : '',
+      btn(c.nascimento ? 'Editar dados' : 'Preencher dados do nascimento', 'edit-crianca', `data-pessoa="${esc(nome)}"`, c.nascimento ? '' : 'primary')) + `
+      ${tabs}
+      <div class="grid-2">
+        ${panel('🍼 Nascimento', nascimento)}
+        ${panel('📅 Consultas', (proximas.length ? `<h3 class="sub">Recomendadas pela Caderneta</h3>${proximas.map(consultaRow).join('')}` : '')
+          + `<h3 class="sub">Próximos compromissos</h3>${eventos.length ? eventos.map(eventLine).join('') : emptyMsg('Nenhum compromisso nos próximos 6 meses.')}`,
+          btn('+ Compromisso', 'new-event-filho', `data-pessoa="${esc(nome)}"`, 'small'))}
+      </div>
+      ${panel('🧩 Marcos do desenvolvimento', marcos)}
+      <div class="grid-2">
+        ${panel('💊 Remédios e suplementos', remedios.length ? remedios.map(m => `<div class="row"><span class="ico">${medIco(m)}</span>
+          <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([m.dose, (m.horarios || []).join(', '), m.fim ? `até ${U.fmtDate(m.fim)}` : ''].filter(Boolean).join(' · '))}</small></span></div>`).join('')
+          : emptyMsg('Nenhum em uso.'), btn('ver em Remédios', 'goto-remedios', `data-pessoa="${esc(nome)}"`, 'small'))}
+        ${panel('📏 Medidas', medidas.length ? `<div class="table-wrap"><table class="table">
+          <thead><tr><th>Data</th><th>Idade</th><th>Peso</th><th>Comprimento</th><th>PC</th><th></th></tr></thead><tbody>
+          ${medidas.map(m => `<tr><td>${U.fmtDate(m.data)}</td><td>${esc(idadeCurta(D.idadeEntre(c.nascimento, m.data)))}</td>
+            <td>${m.peso ? `${num(m.peso, 3)} kg` : '—'}</td><td>${m.comprimento ? `${num(m.comprimento)} cm` : '—'}</td>
+            <td>${m.pc ? `${num(m.pc)} cm` : '—'}</td><td>${btn('✎', 'edit-medida', `data-id="${esc(m.id)}" aria-label="Editar"`, 'small ghost')}</td></tr>`).join('')}
+          </tbody></table></div><p class="muted small">As curvas da OMS entram na próxima atualização.</p>` : emptyMsg('Nenhuma medida registrada.'),
+          btn('+ Medida', 'new-medida', `data-crianca="${esc(c.id)}"`, 'small'))}
+      </div>
+      ${panel('📖 História médica', historia.length ? historia.map(h => `<button type="button" class="row link" data-action="edit-historia" data-id="${esc(h.id)}">
+          <span class="date">${U.fmtDate(h.data)}</span>
+          <span class="grow"><strong>${esc(h.titulo)}</strong><small>${esc([h.tipo, h.texto].filter(Boolean).join(' · '))}</small></span></button>`).join('')
+        : emptyMsg('Doenças, exames, internações, alergias, vacinas fora do calendário…'),
+        btn('+ Registro', 'new-historia', `data-crianca="${esc(c.id)}"`, 'small'))}`;
+  }
+
   function automacao() {
     const cloud = Store.mode() === 'cloud';
     const imp = state.importacao;
@@ -697,7 +807,7 @@ ${kinds}`;
       </div>`;
   }
 
-  const VIEWS = { painel, mural, contas, remedios, alimentacao, calendario, tarefas, listas, contatos, aniversarios, imprimir, automacao, ajustes };
+  const VIEWS = { painel, mural, contas, remedios, alimentacao, filhos, calendario, tarefas, listas, contatos, aniversarios, imprimir, automacao, ajustes };
 
   // ---------- Render ----------
   const currentRoute = () => {
@@ -941,9 +1051,10 @@ ${kinds}`;
     });
   }
 
-  function eventForm(ev = {}) {
+  function eventForm(ev = {}, title = '') {
+    const existe = ev.id && Store.get('evento', ev.id);
     openForm({
-      title: ev.id ? 'Editar compromisso' : 'Novo compromisso',
+      title: title || (existe ? 'Editar compromisso' : 'Novo compromisso'),
       values: ev,
       fields: [
         { name: 'titulo', label: 'O quê', required: true },
@@ -955,7 +1066,7 @@ ${kinds}`;
         { name: 'obs', label: 'Observações', type: 'textarea' },
       ],
       onSave: v => Store.put('evento', { ...ev, ...v }),
-      onDelete: ev.id ? () => Store.remove('evento', ev.id) : null,
+      onDelete: existe ? () => Store.remove('evento', ev.id) : null,
     });
   }
 
@@ -1005,6 +1116,58 @@ ${kinds}`;
       ],
       onSave: v => Store.put('item', { ...i, ...v }),
       onDelete: () => Store.remove('item', i.id),
+    });
+  }
+
+  function criancaForm(c) {
+    openForm({
+      title: `Dados de nascimento — ${c.nome}`,
+      values: c,
+      fields: [
+        { name: 'nascimento', label: 'Data de nascimento', type: 'date', required: true },
+        { name: 'ig_semanas', label: 'Idade gestacional ao nascer (semanas)', type: 'number', min: 20, max: 44,
+          hint: 'Abaixo de 37 semanas, os marcos usam a idade corrigida até os 2 anos (3 anos se < 28 semanas), como orienta a Caderneta.' },
+        { name: 'ig_dias', label: '+ dias', type: 'number', min: 0, max: 6 },
+        { name: 'peso_nascer', label: 'Peso ao nascer (g)', type: 'number', min: 300, max: 7000 },
+        { name: 'comprimento_nascer', label: 'Comprimento ao nascer (cm)', type: 'number', min: 20, max: 70, step: '0.1' },
+        { name: 'pc_nascer', label: 'Perímetro cefálico ao nascer (cm)', type: 'number', min: 15, max: 50, step: '0.1' },
+        { name: 'tipo_sanguineo', label: 'Tipo sanguíneo', type: 'combo', options: ['A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−'] },
+        { name: 'alergias', label: 'Alergias' },
+        { name: 'obs', label: 'Observações', type: 'textarea', hint: 'Ex.: Apgar, intercorrências no parto, teste do pezinho' },
+      ],
+      onSave: v => Store.put('crianca', { ...c, ...v, id: c.id, nome: c.nome }),
+    });
+  }
+
+  function medidaForm(m) {
+    openForm({
+      title: Store.get('medida', m.id || '') ? 'Editar medida' : 'Nova medida',
+      values: m,
+      fields: [
+        { name: 'data', label: 'Data', type: 'date', required: true, default: U.today() },
+        { name: 'peso', label: 'Peso (kg)', type: 'number', min: 0.3, max: 60, step: '0.001', hint: 'Ex.: 7,250' },
+        { name: 'comprimento', label: 'Comprimento / altura (cm)', type: 'number', min: 20, max: 150, step: '0.1' },
+        { name: 'pc', label: 'Perímetro cefálico (cm)', type: 'number', min: 15, max: 60, step: '0.1' },
+        { name: 'obs', label: 'Observações', type: 'textarea' },
+      ],
+      check: v => (v.peso === '' && v.comprimento === '' && v.pc === '' ? 'Preencha pelo menos uma medida.' : ''),
+      onSave: v => Store.put('medida', { ...m, ...v }),
+      onDelete: Store.get('medida', m.id || '') ? () => Store.remove('medida', m.id) : null,
+    });
+  }
+
+  function historiaForm(h) {
+    openForm({
+      title: Store.get('historia', h.id || '') ? 'Editar registro' : 'Novo registro na história médica',
+      values: h,
+      fields: [
+        { name: 'data', label: 'Data', type: 'date', required: true, default: U.today() },
+        { name: 'tipo', label: 'Tipo', type: 'select', options: D.TIPOS_HISTORIA, default: 'Consulta' },
+        { name: 'titulo', label: 'Resumo', required: true, hint: 'Ex.: Bronquiolite, Hemograma, Consulta com otorrino' },
+        { name: 'texto', label: 'Detalhes', type: 'textarea', hint: 'Diagnóstico, conduta, resultado, quem atendeu…' },
+      ],
+      onSave: v => Store.put('historia', { ...h, ...v }),
+      onDelete: Store.get('historia', h.id || '') ? () => Store.remove('historia', h.id) : null,
     });
   }
 
@@ -1170,6 +1333,25 @@ ${kinds}`;
       if (ids.length && confirm(`Remover ${ids.length} itens marcados?`)) Store.removeMany('item', ids);
     },
 
+    'pick-filho': el => { state.filho = el.dataset.pessoa; render(true); },
+    'edit-crianca': el => criancaForm(D.crianca(el.dataset.pessoa)),
+    'set-marco': async el => {
+      const { crianca: cid, marco, s } = el.dataset;
+      const key = D.marcoKey(cid, marco);
+      // Tocar de novo no mesmo botão desmarca.
+      if (D.marcoDe(cid, marco)?.s === s) await Store.remove('marco', key);
+      else await Store.put('marco', { id: key, crianca: cid, marco, s, em: U.today() });
+    },
+    'agendar-consulta': el => eventForm({
+      id: D.consultaEventoId(D.criancaId(el.dataset.pessoa), el.dataset.nome),
+      titulo: `Consulta pediátrica ${el.dataset.pessoa} (${el.dataset.nome})`, data: el.dataset.date, pessoa: el.dataset.pessoa,
+    }, `Agendar consulta do ${el.dataset.nome}`),
+    'new-event-filho': el => eventForm({ data: U.today(), pessoa: el.dataset.pessoa }),
+    'goto-remedios': el => { state.remPessoa = el.dataset.pessoa; location.hash = '#/remedios'; },
+    'new-medida': el => medidaForm({ crianca: el.dataset.crianca }),
+    'edit-medida': el => medidaForm(Store.get('medida', el.dataset.id)),
+    'new-historia': el => historiaForm({ crianca: el.dataset.crianca }),
+    'edit-historia': el => historiaForm(Store.get('historia', el.dataset.id)),
     'new-contact': () => contactForm(),
     'new-birthday': () => contactForm({ categoria: 'Família' }, 'Novo aniversário'),
     'edit-contact': el => contactForm(Store.get('contato', el.dataset.id)),

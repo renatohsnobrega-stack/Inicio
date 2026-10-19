@@ -409,3 +409,18 @@ h3.sub { margin: 10px 0 2px; font-size: 12px; letter-spacing: .04em; text-transf
 
 /* Aniversários */
 .cal-cell .ev.bday { background: #fbe7f0; color: #8a2f58; }
+
+/* Filhos */
+.dados { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
+.dados dt { color: var(--muted); font-size: 13.5px; }
+.dados dd { margin: 0; font-weight: 600; }
+.row.marco { flex-wrap: wrap; align-items: flex-start; }
+.row.marco details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.row.marco details small { margin-top: 4px; }
+.seg { display: flex; gap: 4px; flex: none; }
+.seg .btn { min-width: 38px; }
+.alerta { background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.alerta small { display: block; color: var(--muted); margin-top: 4px; }
+details.todas { margin-top: 12px; }
+details.todas > summary { cursor: pointer; font-weight: 600; }
+.muted-row { opacity: .6; }
