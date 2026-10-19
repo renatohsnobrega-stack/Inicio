@@ -406,3 +406,6 @@ h3.sub { margin: 10px 0 2px; font-size: 12px; letter-spacing: .04em; text-transf
 .quick-add input.prazo { flex: 0 0 auto; width: auto; font-size: 14px; }
 .badge.prazo { margin-left: auto; }
 @media (max-width: 640px) { .check-row .badge.prazo { display: inline-block; } .quick-add { flex-wrap: wrap; } }
+
+/* Aniversários */
+.cal-cell .ev.bday { background: #fbe7f0; color: #8a2f58; }

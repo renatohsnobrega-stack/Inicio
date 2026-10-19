@@ -16,6 +16,7 @@ const D = (() => {
   const CORES = ['#2f6f5e', '#b0527a', '#4a6fa5', '#b7791f', '#7a5aa8'];
   const UNIDADES = ['comprimidos', 'cápsulas', 'ml', 'gotas', 'sachês', 'doses', 'unidades'];
   const AVISO_ESTOQUE = 7; // dias de antecedência do aviso de estoque acabando
+  const AVISO_ANIVERSARIO = 7; // dias de antecedência do aviso de aniversário no Painel
 
   const config = id => Store.get('config', id) || {};
   const pessoas = () => {
@@ -58,6 +59,29 @@ const D = (() => {
     if (d.length === 10 || d.length === 11) d = '55' + d;
     return 'https://wa.me/' + d;
   };
+
+  // ---------- Aniversários (só dos contatos cadastrados) ----------
+  const aniversarioDe = c => Schema.parseAniversario(c?.aniversario);
+  // Próximo aniversário a partir de `hoje` (inclusive). Quem nasceu em 29/02 comemora em 28/02 nos anos comuns.
+  // idade = quantos anos a pessoa faz nesse dia (null se o ano não foi informado).
+  function proximoAniversario(c, hoje = U.today()) {
+    const a = aniversarioDe(c);
+    if (!a) return null;
+    const y0 = Number(hoje.slice(0, 4));
+    for (const y of [y0, y0 + 1]) {
+      const data = `${y}-${U.pad(a.mes)}-${U.pad(Math.min(a.dia, U.daysInMonth(y, a.mes)))}`;
+      if (data < hoje) continue;
+      const dias = Math.round((U.parseYmd(data) - U.parseYmd(hoje)) / 864e5);
+      return { contato: c, data, dias, mes: a.mes, dia: a.dia, idade: a.ano && a.ano < y ? y - a.ano : null };
+    }
+    return null;
+  }
+  const aniversarios = (hoje = U.today()) => contatos().map(c => proximoAniversario(c, hoje)).filter(Boolean)
+    .sort((a, b) => a.dias - b.dias || a.contato.nome.localeCompare(b.contato.nome));
+  const aniversariosProximos = (dias = AVISO_ANIVERSARIO, hoje = U.today()) => aniversarios(hoje).filter(x => x.dias <= dias);
+  const aniversariantesEm = date => aniversarios(date).filter(x => x.dias === 0);
+  // "hoje", "amanhã", "em 5 dias"
+  const quandoTxt = dias => (dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : `em ${dias} dias`);
 
   // Itens criados por agentes/automação que ainda não foram conferidos.
   const paraRevisar = () => Schema.REVISAVEIS.flatMap(kind =>
@@ -270,9 +294,10 @@ const D = (() => {
 
   return {
     SLOTS, CATEGORIAS, LOCAIS, TIPOS_TAREFA, REPETE, STATUS_LABEL, LISTAS_SUGERIDAS, CATEG_CONTATO,
-    UNIDADES, AVISO_ESTOQUE,
+    UNIDADES, AVISO_ESTOQUE, AVISO_ANIVERSARIO,
     config, pessoas, filhos, adultos, responsaveis, casaNome, eu, setEu, corDe,
     paraRevisar, recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
+    aniversarioDe, proximoAniversario, aniversarios, aniversariosProximos, aniversariantesEm, quandoTxt,
     billOccurrences, billStatus, contasAtencao,
     medActiveOn, doseKey, dosesOn, ehSuplemento, temEstoque, estoque, estoqueAcabando, fmtQtd,
     mealId, mealOwn, meal, mealResumo, suplementosDe,

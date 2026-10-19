@@ -4,7 +4,7 @@
 const Schema = (() => {
   const CATEGORIAS = ['Moradia', 'Água / Luz / Gás', 'Internet / Telefone', 'Cartão de crédito', 'Mercado',
     'Saúde', 'Educação', 'Transporte', 'Seguros', 'Impostos', 'Assinaturas', 'Outros'];
-  const CATEG_CONTATO = ['Emergência', 'Saúde', 'Família', 'Escola', 'Serviços da casa', 'Trabalho', 'Outros'];
+  const CATEG_CONTATO = ['Emergência', 'Saúde', 'Família', 'Amigos', 'Escola', 'Serviços da casa', 'Trabalho', 'Outros'];
   const SLOTS = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche', jantar: 'Jantar' };
 
   const f = (tipo, desc, obrig = false) => ({ tipo, desc, obrig });
@@ -91,13 +91,14 @@ const Schema = (() => {
       nome: 'Contatos úteis', plural: 'contatos', icone: '📞',
       campos: {
         nome: f('texto', 'Nome', true),
+        aniversario: f('"AAAA-MM-DD" ou "MM-DD" (sem o ano)', 'Data de aniversário; o ano é opcional e serve para mostrar a idade'),
         categoria: f(CATEG_CONTATO.map(c => `"${c}"`).join(' | '), 'Categoria'),
         telefone: f('texto', 'Telefone'),
         whatsapp: f('booleano', 'Tem WhatsApp'),
         endereco: f('texto', 'Endereço'),
         obs: f('texto', 'Observações'),
       },
-      exemplo: { nome: 'Dra. Paula (pediatra)', categoria: 'Saúde', telefone: '(11) 98765-4321', whatsapp: true },
+      exemplo: { nome: 'Dra. Paula (pediatra)', categoria: 'Saúde', telefone: '(11) 98765-4321', whatsapp: true, aniversario: '03-15' },
     },
     recado: {
       nome: 'Recados do mural', plural: 'recados', icone: '📌',
@@ -160,6 +161,32 @@ const Schema = (() => {
   const toInt = (v, min, max) => {
     const n = parseInt(v, 10);
     return isNaN(n) ? '' : Math.min(max, Math.max(min, n));
+  };
+  // Aniversário: "1985-03-15", "03-15", "--03-15", "15/03" ou "15/03/1985" → { ano, mes, dia } (ano pode ser null).
+  // Ano fora de 1900..ano atual é descartado (fica só dia e mês).
+  function parseAniversario(v) {
+    const s = String(v ?? '').trim();
+    let m, ano = null, mes, dia;
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) [, ano, mes, dia] = m;
+    else if ((m = s.match(/^-{0,2}(\d{1,2})-(\d{1,2})$/))) [, mes, dia] = m;
+    else if ((m = s.match(/^(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2}|\d{4}))?$/))) {
+      [, dia, mes, ano] = m;
+      if (ano && ano.length === 2) ano = (Number(ano) > new Date().getFullYear() % 100 ? '19' : '20') + ano;
+    } else return null;
+    mes = Number(mes); dia = Number(dia); ano = ano ? Number(ano) : null;
+    if (mes < 1 || mes > 12 || dia < 1 || dia > U.daysInMonth(2000, mes)) return null; // 2000: aceita 29/02
+    if (ano && (ano < 1900 || ano > new Date().getFullYear())) ano = null;
+    if (ano && dia > U.daysInMonth(ano, mes)) ano = null;
+    return { ano, mes, dia };
+  }
+  const toAniversario = v => {
+    const a = parseAniversario(v);
+    return !a ? '' : `${a.ano ? a.ano + '-' : ''}${pad(a.mes)}-${pad(a.dia)}`;
+  };
+  // Para mostrar: "15/03" ou "15/03/1985".
+  const fmtAniversario = v => {
+    const a = parseAniversario(v);
+    return !a ? '' : `${pad(a.dia)}/${pad(a.mes)}${a.ano ? '/' + a.ano : ''}`;
   };
   // Quantidade ("28", "2,5", 30) → número >= 0; vazio continua vazio.
   const toQtd = v => {
@@ -270,6 +297,8 @@ const Schema = (() => {
         str('nome', 'categoria', 'telefone', 'endereco', 'obs');
         o.whatsapp = toBool(o.whatsapp, false);
         if (!o.categoria) o.categoria = 'Outros';
+        // Data que não deu para entender fica como veio, para o validate apontar o erro.
+        if (o.aniversario) o.aniversario = toAniversario(o.aniversario) || String(o.aniversario).trim();
         break;
       case 'recado':
         str('texto', 'autor');
@@ -306,6 +335,7 @@ const Schema = (() => {
     if (kind === 'conta' && o.tipo === 'mensal' && !o.dia) errs.push('conta mensal precisa de "dia"');
     if (kind === 'refeicao' && !/^[0-6]-(cafe|almoco|lanche|jantar)(-[a-z0-9-]+)?$/.test(o.id)) errs.push('"dia" ou "refeicao" inválido');
     if (kind === 'item' && !o.lista && !o.lista_nome) errs.push('informe "lista_nome"');
+    if (kind === 'contato' && o.aniversario && !parseAniversario(o.aniversario)) errs.push('"aniversario" inválido (use DD/MM ou DD/MM/AAAA)');
     return errs;
   }
 
@@ -316,7 +346,7 @@ const Schema = (() => {
       case 'evento': return `${o.titulo} — ${U.fmtDate(o.data)}${o.hora ? ` às ${o.hora}` : ''}${o.repete && o.repete !== 'nao' ? ` (${o.repete})` : ''}`;
       case 'tarefa': return `${o.titulo} — ${{ unica: o.data ? `até ${U.fmtDate(o.data)}` : 'uma vez', diaria: 'todo dia', semanal: 'semanal', mensal: `todo dia ${o.dia}` }[o.tipo] || o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
       case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}${o.pessoa ? ` (${o.pessoa})` : ''}: ${o.texto || '—'}`; }
-      case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}`;
+      case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}${parseAniversario(o.aniversario) ? ` — 🎂 ${fmtAniversario(o.aniversario)}` : ''}`;
       case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}${o.prazo ? ` (até ${U.fmtDate(o.prazo)})` : ''}`;
       case 'lista': return o.nome;
       default: return o.texto || o.nome || o.titulo || o.id;
@@ -418,5 +448,6 @@ ${JSON.stringify(exemplo, null, 2)}
   return {
     CATEGORIAS, CATEG_CONTATO, SLOTS, KINDS, COMUNS, REVISAVEIS,
     kindOf, normalize, validate, resumo, parseImport, parseICS, promptIA, hash, toYmd, slug, mealId,
+    parseAniversario, toAniversario, fmtAniversario,
   };
 })();
