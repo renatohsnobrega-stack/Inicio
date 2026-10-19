@@ -126,6 +126,56 @@ const Schema = (() => {
       exemplo: { texto: '2 L de leite', lista_nome: 'Compras' },
     },
   };
+  // Dados dos filhos: ficam fora dos tipos gerais (prompt de IA, MCP) e só são aceitos por chaves "Total + filhos".
+  const KINDS_FILHOS = {
+    crianca: {
+      nome: 'Dados de nascimento', plural: 'criancas', icone: '👶',
+      campos: {
+        nome: f('texto', 'Nome do filho (igual ao de Ajustes)', true),
+        nascimento: f('data AAAA-MM-DD', 'Data de nascimento'),
+        sexo: f('"M" | "F"', 'Sexo (usado nas curvas da OMS)'),
+        ig_semanas: f('número', 'Idade gestacional ao nascer, em semanas'),
+        ig_dias: f('número 0-6', 'Dias além das semanas'),
+        peso_nascer: f('número', 'Peso ao nascer, em gramas'),
+        comprimento_nascer: f('número', 'Comprimento ao nascer, em cm'),
+        pc_nascer: f('número', 'Perímetro cefálico ao nascer, em cm'),
+        tipo_sanguineo: f('texto', 'Ex.: "O+"'),
+        alergias: f('texto', 'Alergias'),
+        obs: f('texto', 'Observações'),
+      },
+    },
+    marco: {
+      nome: 'Marcos do desenvolvimento', plural: 'marcos', icone: '🧩',
+      campos: {
+        crianca: f('texto', 'Id da criança (ex.: "antonio")', true),
+        marco: f('texto', 'Id do marco da Caderneta da Criança (ex.: "senta")', true),
+        s: f('"P" | "A" | "NV"', 'Presente, ausente ou não verificado', true),
+        em: f('data AAAA-MM-DD', 'Quando foi observado'),
+      },
+    },
+    medida: {
+      nome: 'Medidas', plural: 'medidas', icone: '📏',
+      campos: {
+        crianca: f('texto', 'Id da criança (ex.: "antonio")', true),
+        data: f('data AAAA-MM-DD', 'Data da medida', true),
+        peso: f('número', 'Peso em kg (ex.: 8.4)'),
+        comprimento: f('número', 'Comprimento/altura em cm'),
+        pc: f('número', 'Perímetro cefálico em cm'),
+        obs: f('texto', 'Observações'),
+      },
+    },
+    historia: {
+      nome: 'História médica', plural: 'historias', icone: '📖',
+      campos: {
+        crianca: f('texto', 'Id da criança (ex.: "antonio")', true),
+        data: f('data AAAA-MM-DD', 'Data', true),
+        tipo: f('"Consulta" | "Doença" | "Exame" | "Vacina" | "Internação" | "Cirurgia" | "Alergia" | "Outro"', 'Tipo de registro'),
+        titulo: f('texto', 'Resumo (ex.: "Bronquiolite")', true),
+        texto: f('texto', 'Detalhes: diagnóstico, conduta, resultado, quem atendeu'),
+      },
+    },
+  };
+  const info = kind => KINDS[kind] || KINDS_FILHOS[kind];
   const ALIASES = {
     medicamento: 'remedio', medicamentos: 'remedio', compromisso: 'evento', compromissos: 'evento',
     cardapio: 'refeicao', contas_a_pagar: 'conta',
@@ -133,7 +183,7 @@ const Schema = (() => {
   Object.entries(KINDS).forEach(([k, v]) => { ALIASES[k] = k; ALIASES[v.plural] = k; });
   const kindOf = name => ALIASES[strip(name).replace(/\s+/g, '_')] || null;
   // Tipos que um agente pode criar e que pedem conferência humana no Painel.
-  const REVISAVEIS = ['conta', 'remedio', 'evento', 'tarefa', 'contato'];
+  const REVISAVEIS = ['conta', 'remedio', 'evento', 'tarefa', 'contato', 'medida', 'historia'];
 
   // ---------- Conversões tolerantes ----------
   const pad = U.pad;
@@ -312,6 +362,26 @@ const Schema = (() => {
         if (o.prazo) o.prazo = toYmd(o.prazo);
         if (!o.criadoEm) o.criadoEm = new Date().toISOString();
         break;
+      case 'crianca':
+        str('nome', 'tipo_sanguineo', 'alergias', 'obs');
+        if (o.nascimento) o.nascimento = toYmd(o.nascimento);
+        if (o.sexo) o.sexo = pickEnum(o.sexo, [[/^(f|menina|fem|girl)/, 'F'], [/^(m|menino|masc|boy)/, 'M']], '');
+        ['ig_semanas', 'ig_dias', 'peso_nascer', 'comprimento_nascer', 'pc_nascer'].forEach(k => { if (k in o) o[k] = toQtd(o[k]); });
+        break;
+      case 'marco':
+        o.s = String(o.s || '').toUpperCase();
+        if (o.em) o.em = toYmd(o.em);
+        if (!o.id && o.crianca && o.marco) o.id = `${o.crianca}-${o.marco}`;
+        break;
+      case 'medida':
+        str('obs');
+        if (o.data) o.data = toYmd(o.data);
+        ['peso', 'comprimento', 'pc'].forEach(k => { if (k in o) o[k] = toQtd(o[k]); });
+        break;
+      case 'historia':
+        str('tipo', 'titulo', 'texto');
+        if (o.data) o.data = toYmd(o.data);
+        break;
       case 'lista':
         str('nome', 'icone');
         if (!o.criadaEm) o.criadaEm = new Date().toISOString();
@@ -349,6 +419,11 @@ const Schema = (() => {
       case 'contato': return `${o.nome} — ${o.telefone || 'sem telefone'}${parseAniversario(o.aniversario) ? ` — 🎂 ${fmtAniversario(o.aniversario)}` : ''}`;
       case 'item': return `${o.texto} → ${o.lista_nome || 'lista'}${o.prazo ? ` (até ${U.fmtDate(o.prazo)})` : ''}`;
       case 'lista': return o.nome;
+      case 'medida': {
+        const n = v => String(v).replace('.', ',');
+        return `${o.crianca} — ${U.fmtDate(o.data)} — ${[o.peso && `${n(o.peso)} kg`, o.comprimento && `${n(o.comprimento)} cm`, o.pc && `PC ${n(o.pc)} cm`].filter(Boolean).join(', ') || 'sem medida'}`;
+      }
+      case 'historia': return `${o.crianca} — ${U.fmtDate(o.data)} — ${o.tipo ? `${o.tipo}: ` : ''}${o.titulo || ''}`;
       default: return o.texto || o.nome || o.titulo || o.id;
     }
   }
@@ -446,7 +521,7 @@ ${JSON.stringify(exemplo, null, 2)}
   }
 
   return {
-    CATEGORIAS, CATEG_CONTATO, SLOTS, KINDS, COMUNS, REVISAVEIS,
+    CATEGORIAS, CATEG_CONTATO, SLOTS, KINDS, KINDS_FILHOS, info, COMUNS, REVISAVEIS,
     kindOf, normalize, validate, resumo, parseImport, parseICS, promptIA, hash, toYmd, slug, mealId,
     parseAniversario, toAniversario, fmtAniversario,
   };
