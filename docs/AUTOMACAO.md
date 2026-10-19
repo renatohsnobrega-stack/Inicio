@@ -65,6 +65,14 @@ Cada tarefa continua na lista do Google de onde veio (o app guarda isso no campo
 próprio app vão para a primeira lista de `LISTAS_TAREFAS` (Casa). "Minhas tarefas" é a lista padrão do Google, encontrada
 mesmo que a conta esteja em outro idioma ("My Tasks").
 
+Tarefas **atribuídas a você por outra pessoa** (pelo Google Chat ou por um comentário no Docs) também entram no app. O
+Google só as entrega quando o programa pede (`showAssigned`), por isso o script lê as listas direto da API.
+
+**Quem faz:** as tarefas atribuídas a você e as de "Minhas tarefas" ficam com `DONO_DA_CONTA` (Renato), e só aparecem
+como pendência dele. Na lista Casa, vale o nome escrito no título ou na descrição (`PESSOAS`); sem nome, fica para os dois.
+Se você trocar o responsável no app, o script não desfaz. Tarefas antigas sem responsável são completadas na próxima
+sincronização.
+
 Criar, editar, concluir, reabrir ou apagar num lado aparece no outro. "Excluir tarefas concluídas" no Google também tira
 os itens do app. Se a mesma tarefa mudar nos dois lados entre duas sincronizações, vale a alteração mais recente.
 
@@ -86,7 +94,7 @@ continuam só no app.
 exigem acesso total à conta Google. A lista "Compras" do Google Tarefas cumpre o mesmo papel: fica no celular, no Gmail e
 na Agenda. Para adicionar por voz, use o atalho da Siri abaixo.
 
-**Teste automático:** `node testes/google-tarefas.test.js` roda 17 verificações com o Google e o app simulados.
+**Teste automático:** `node testes/google-tarefas.test.js` roda 34 verificações com o Google e o app simulados.
 
 ### Atalho da Siri: "adicionar à lista de compras" (opcional)
 No iPhone, app **Atalhos** → **+**:
