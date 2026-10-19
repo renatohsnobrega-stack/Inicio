@@ -88,4 +88,12 @@ t('item normaliza prazo e lista ordena por prazo', () => {
   eq(D.itensDa('l').map(i => i.texto), ['Antes', 'Depois', 'Sem prazo', 'Feito']);
 });
 
+t('filho fica fora de responsáveis e de tarefas, mas continua nas pessoas', () => {
+  put('config', { id: 'pessoas', nomes: ['Renato', 'Vanessa', 'Antônio'], filhos: ['Antônio', 'Fantasma'] });
+  eq(D.filhos(), ['Antônio']);
+  eq(D.adultos(), ['Renato', 'Vanessa']);
+  eq(D.responsaveis(), ['Renato', 'Vanessa', 'Ambos']);
+  assert.strictEqual(D.pessoas().length, 3);
+});
+
 console.log(`\n${n} testes passaram.`);
