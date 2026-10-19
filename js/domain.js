@@ -14,6 +14,8 @@ const D = (() => {
   const LISTAS_SUGERIDAS = [['🛒', 'Compras'], ['💊', 'Farmácia'], ['🔧', 'Casa / manutenção'], ['🎁', 'Presentes e desejos']];
   const CATEG_CONTATO = Schema.CATEG_CONTATO;
   const CORES = ['#2f6f5e', '#b0527a', '#4a6fa5', '#b7791f', '#7a5aa8'];
+  const UNIDADES = ['comprimidos', 'cápsulas', 'ml', 'gotas', 'sachês', 'doses', 'unidades'];
+  const AVISO_ESTOQUE = 7; // dias de antecedência do aviso de estoque acabando
 
   const config = id => Store.get('config', id) || {};
   const pessoas = () => {
@@ -115,10 +117,58 @@ const D = (() => {
     }
     return out.sort((a, b) => a.hora.localeCompare(b.hora) || (a.med.pessoa || '').localeCompare(b.med.pessoa || ''));
   }
+  const ehSuplemento = m => m.categoria === 'suplemento';
+  const temEstoque = m => m.estoque !== '' && m.estoque != null && !isNaN(Number(m.estoque));
+
+  // Estoque: "estoque" é o que havia no começo do dia "estoque_em". Cada dia passado desconta
+  // as doses previstas (horários × unidades por dose), mesmo que ninguém marque como tomada.
+  function estoque(m, hoje = U.today()) {
+    if (!temEstoque(m)) return null;
+    const porDose = m.por_dose === '' || m.por_dose == null ? 1 : Number(m.por_dose);
+    const n = (m.horarios || []).length;
+    let usado = 0;
+    const base = m.estoque_em && m.estoque_em < hoje ? m.estoque_em : hoje;
+    for (let d = U.parseYmd(base); U.ymd(d) < hoje; d = U.addDays(d, 1)) {
+      if (medActiveOn(m, U.ymd(d))) usado += n * porDose;
+    }
+    const restante = Math.max(0, Math.round((Number(m.estoque) - usado) * 100) / 100);
+    const porDia = medActiveOn(m, hoje) ? n * porDose : 0;
+    // Dias cobertos contando hoje; "acaba" é o primeiro dia sem remédio.
+    const dias = porDia ? Math.floor(restante / porDia) : null;
+    const acaba = dias == null ? null : U.ymd(U.addDays(U.parseYmd(hoje), dias));
+    const terminaAntes = m.fim && acaba && acaba > m.fim;
+    let status = 'ok';
+    if (porDia && !terminaAntes) status = dias === 0 ? 'acabou' : dias <= AVISO_ESTOQUE ? 'baixo' : 'ok';
+    return { restante, porDia, dias, acaba, status };
+  }
+  const estoqueAcabando = (hoje = U.today()) => Store.list('remedio')
+    .map(med => ({ med, est: estoque(med, hoje) }))
+    .filter(x => x.est && x.est.status !== 'ok')
+    .sort((a, b) => a.est.dias - b.est.dias || a.med.nome.localeCompare(b.med.nome));
+  const fmtQtd = n => (Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10).replace('.', ','));
 
   // ---------- Alimentação ----------
-  const mealId = (wd, slot) => `${wd}-${slot}`;
-  const meal = (wd, slot) => Store.get('refeicao', mealId(wd, slot))?.texto || '';
+  // Sem pessoa = refeição da família. Com pessoa = a dela; se estiver vazia, vale a da família.
+  const mealId = (wd, slot, pessoa) => Schema.mealId(wd, slot, pessoa);
+  const mealOwn = (wd, slot, pessoa) => Store.get('refeicao', mealId(wd, slot, pessoa))?.texto || '';
+  const meal = (wd, slot, pessoa) => (pessoa && mealOwn(wd, slot, pessoa)) || mealOwn(wd, slot);
+  // O que cada um come naquela refeição, juntando quem come a mesma coisa:
+  // [{ quem: '' , texto }] quando é igual para todos; senão [{ quem: 'Renato e Vanessa', texto }, …].
+  function mealResumo(wd, slot) {
+    const ps = pessoas();
+    if (!ps.some(p => mealOwn(wd, slot, p))) return mealOwn(wd, slot) ? [{ quem: '', texto: mealOwn(wd, slot) }] : [];
+    const grupos = new Map();
+    for (const p of ps) {
+      const t = meal(wd, slot, p);
+      if (t) grupos.set(t, [...(grupos.get(t) || []), p]);
+    }
+    if (grupos.size === 1 && [...grupos.values()][0].length === ps.length) return [{ quem: '', texto: [...grupos.keys()][0] }];
+    const junta = l => (l.length > 1 ? `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}` : l[0]);
+    return [...grupos].map(([texto, l]) => ({ quem: junta(l), texto }));
+  }
+  const suplementosDe = (pessoa, date = U.today()) => Store.list('remedio')
+    .filter(m => ehSuplemento(m) && medActiveOn(m, date) && (pessoa == null || (m.pessoa || '') === pessoa))
+    .sort((a, b) => ((a.horarios || [])[0] || '99').localeCompare((b.horarios || [])[0] || '99') || a.nome.localeCompare(b.nome));
 
   // ---------- Eventos ----------
   function occursOn(ev, date) {
@@ -177,11 +227,12 @@ const D = (() => {
 
   return {
     SLOTS, CATEGORIAS, LOCAIS, TIPOS_TAREFA, REPETE, STATUS_LABEL, LISTAS_SUGERIDAS, CATEG_CONTATO,
+    UNIDADES, AVISO_ESTOQUE,
     config, pessoas, responsaveis, casaNome, eu, setEu, corDe,
     paraRevisar, recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
     billOccurrences, billStatus, contasAtencao,
-    medActiveOn, doseKey, dosesOn,
-    mealId, meal,
+    medActiveOn, doseKey, dosesOn, ehSuplemento, temEstoque, estoque, estoqueAcabando, fmtQtd,
+    mealId, mealOwn, meal, mealResumo, suplementosDe,
     occursOn, eventsOn, eventsBetween,
     isRecorrente, taskApplies, taskDone, tasksOn, freqLabel,
   };

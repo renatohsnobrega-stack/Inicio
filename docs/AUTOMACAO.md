@@ -198,10 +198,10 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 | tipo | campos principais |
 |---|---|
 | `conta` | **nome**, valor, tipo (`mensal`/`unica`), dia, data, categoria, responsavel, forma, codigo, obs |
-| `remedio` | **nome**, pessoa, dose, horarios (`["08:00","20:00"]`), instrucoes, inicio, fim, ativo |
+| `remedio` | **nome**, categoria (`remedio`/`suplemento`), pessoa, dose, horarios (`["08:00","20:00"]`), instrucoes, inicio, fim, ativo, estoque, unidade, por_dose, estoque_em |
 | `evento` | **titulo**, **data**, hora, pessoa, local, repete (`nao`/`semanal`/`mensal`/`anual`), obs |
 | `tarefa` | **titulo**, tipo (`unica`/`diaria`/`semanal`/`mensal`), data, dias, dia, responsavel, local |
-| `refeicao` | **dia** (0-6), **refeicao** (`cafe`/`almoco`/`lanche`/`jantar`), texto |
+| `refeicao` | **dia** (0-6), **refeicao** (`cafe`/`almoco`/`lanche`/`jantar`), texto, pessoa (vazio = família) |
 | `contato` | **nome**, categoria, telefone, whatsapp, endereco, obs |
 | `recado` | **texto**, autor, fixado |
 | `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito |

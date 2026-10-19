@@ -6,7 +6,7 @@ const Print = (() => {
   const SHEETS = [
     { id: 'dia', nome: 'Resumo do dia', onde: 'Geladeira / porta', param: 'date', landscape: false },
     { id: 'remedios', nome: 'Quadro de remédios da semana', onde: 'Banheiro / cozinha', param: 'week', landscape: true },
-    { id: 'cardapio', nome: 'Cardápio semanal', onde: 'Geladeira', param: null, landscape: true },
+    { id: 'cardapio', nome: 'Cardápio semanal', onde: 'Geladeira', param: 'pessoa', landscape: true },
     { id: 'contas', nome: 'Contas do mês', onde: 'Escritório / pasta de contas', param: 'month', landscape: false },
     { id: 'calendario', nome: 'Calendário do mês', onde: 'Mural / corredor', param: 'month', landscape: true },
     { id: 'tarefas', nome: 'Rotina de tarefas da semana', onde: 'Lavanderia / cozinha', param: 'week', landscape: true },
@@ -19,6 +19,9 @@ const Print = (() => {
       <div class="sheet-brand">${esc(D.casaNome())}</div>
     </header>`;
   const empty = msg => `<p class="sheet-empty">${esc(msg)}</p>`;
+  // Refeição com o nome de quem come algo diferente: "<b>Antônio:</b> papinha<br><b>Renato e Vanessa:</b> arroz…"
+  const mealLines = (wd, slot) => D.mealResumo(wd, slot)
+    .map(x => `${x.quem ? `<b>${esc(x.quem)}:</b> ` : ''}${nl2br(x.texto)}`).join('<br>');
   const weekDays = week => {
     const start = U.startOfWeek(U.parseYmd(week));
     return [...Array(7)].map((_, i) => U.ymd(U.addDays(start, i)));
@@ -45,7 +48,7 @@ const Print = (() => {
       </div>
       <div>
         ${sec('🍽️ Refeições', `<dl class="sheet-meals">${D.SLOTS.map(s =>
-          `<dt>${s.nome}</dt><dd>${nl2br(D.meal(wd, s.id)) || '—'}</dd>`).join('')}</dl>`)}
+          `<dt>${s.nome}</dt><dd>${mealLines(wd, s.id) || '—'}</dd>`).join('')}</dl>`)}
         ${sec('📅 Compromissos', lista(eventos, e => `<li><b class="time">${esc(e.hora || '—')}</b> ${esc(e.titulo)}
           <small>${esc([e.pessoa, e.local].filter(Boolean).join(' · '))}</small></li>`, 'Nenhum compromisso.'))}
         ${sec('💰 Contas a vencer (7 dias)', lista(contas, o => `<li>${BOX}<b class="time">${U.fmtDay(o.venc)}</b> ${esc(o.conta.nome)}
@@ -68,7 +71,7 @@ const Print = (() => {
       html += `<h2 class="sheet-person">${esc(pessoa)}</h2>
       <table class="grid"><thead><tr><th class="w-time">Horário</th><th>Remédio</th><th>Dose / como tomar</th>
         ${days.map(dayTh).join('')}</tr></thead><tbody>
-        ${rows.map(({ m, h }) => `<tr><td class="time">${h}</td><td><b>${esc(m.nome)}</b></td>
+        ${rows.map(({ m, h }) => `<tr><td class="time">${h}</td><td><b>${esc(m.nome)}</b>${D.ehSuplemento(m) ? ' <small>(suplemento)</small>' : ''}</td>
           <td>${esc(m.dose)}${m.instrucoes ? `<br><small>${esc(m.instrucoes)}</small>` : ''}</td>
           ${days.map(d => `<td class="c">${D.medActiveOn(m, d) ? BOX : '<span class="na">—</span>'}</td>`).join('')}</tr>`).join('')}
       </tbody></table>`;
@@ -76,12 +79,17 @@ const Print = (() => {
     return html;
   }
 
-  function cardapio() {
+  function cardapio({ pessoa } = {}) {
     const obs = D.config('alimentacao').obs;
-    return head('Cardápio da semana', 'Rotina alimentar') + `
+    const cell = (wd, slot) => (pessoa ? nl2br(D.meal(wd, slot, pessoa)) : mealLines(wd, slot));
+    const supl = D.suplementosDe(pessoa || null);
+    return head(pessoa ? `Cardápio de ${pessoa}` : 'Cardápio da semana', 'Rotina alimentar') + `
       <table class="grid meals"><thead><tr><th class="w-slot"></th>${U.WD.map(d => `<th>${d}</th>`).join('')}</tr></thead>
       <tbody>${D.SLOTS.map(s => `<tr><th class="slot">${s.nome}</th>
-        ${U.WD.map((_, wd) => `<td>${nl2br(D.meal(wd, s.id))}</td>`).join('')}</tr>`).join('')}</tbody></table>
+        ${U.WD.map((_, wd) => `<td>${cell(wd, s.id)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      ${supl.length ? `<section class="sheet-sec"><h2>🌿 Suplementos</h2><ul class="sheet-list cols">${supl.map(m =>
+        `<li><b class="time">${esc((m.horarios || []).join(', ') || '—')}</b> ${esc(m.nome)}
+          <small>${esc([pessoa ? '' : m.pessoa, m.dose, m.instrucoes].filter(Boolean).join(' · '))}</small></li>`).join('')}</ul></section>` : ''}
       ${obs ? `<footer class="sheet-notes"><h2>Observações</h2><p>${nl2br(obs)}</p></footer>` : ''}`;
   }
 
@@ -187,5 +195,5 @@ const Print = (() => {
     window.print();
   }
 
-  return { SHEETS, render, print };
+  return { SHEETS, render, print, mealLines };
 })();
