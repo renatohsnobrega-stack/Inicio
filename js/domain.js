@@ -83,6 +83,78 @@ const D = (() => {
   // "hoje", "amanhã", "em 5 dias"
   const quandoTxt = dias => (dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : `em ${dias} dias`);
 
+  // ---------- Filhos: dados de nascimento, idade, marcos, medidas e história médica ----------
+  // Cada filho tem um registro "crianca" com id = nome sem acento ("antonio").
+  const criancaId = nome => Schema.slug(nome);
+  const crianca = nome => Store.get('crianca', criancaId(nome)) || { id: criancaId(nome), nome };
+  // Data de nascimento + n meses (31/01 + 1 mês = 28/02).
+  function mesesDepois(nasc, n) {
+    const a = U.parseYmd(nasc);
+    const t = a.getMonth() + n, y = a.getFullYear() + Math.floor(t / 12), m = ((t % 12) + 12) % 12 + 1;
+    return `${y}-${U.pad(m)}-${U.pad(Math.min(a.getDate(), U.daysInMonth(y, m)))}`;
+  }
+  // Idade entre duas datas: meses completos + dias; "total" em meses com fração (para achar a faixa).
+  function idadeEntre(nasc, data) {
+    if (!nasc || data < nasc) return null;
+    const a = U.parseYmd(nasc), b = U.parseYmd(data);
+    let meses = (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
+    if (mesesDepois(nasc, meses) > data) meses--;
+    const dias = Math.round((b - U.parseYmd(mesesDepois(nasc, meses))) / 864e5);
+    return { meses, dias, total: meses + dias / 30.4375 };
+  }
+  const igSemanas = c => (Number(c?.ig_semanas) || 0) + (Number(c?.ig_dias) || 0) / 7;
+  // Prematuro (< 37 semanas): desconta o que faltou para 40 semanas, até os 2 anos de idade
+  // (até os 3 anos se nasceu com menos de 28 semanas). Caderneta da Criança, p. 20 e 79.
+  function idadeCrianca(c, hoje = U.today()) {
+    const real = idadeEntre(c?.nascimento, hoje);
+    if (!real) return null;
+    const ig = igSemanas(c);
+    let corrigida = null;
+    if (ig && ig < 37 && real.meses < (ig < 28 ? 36 : 24)) {
+      const ref = U.ymd(U.addDays(U.parseYmd(hoje), -Math.round((40 - ig) * 7)));
+      corrigida = idadeEntre(c.nascimento, ref) || { meses: 0, dias: 0, total: 0, antesDoTermo: true };
+    }
+    return { real, corrigida, usada: corrigida || real };
+  }
+  // "12 dias", "3 meses e 5 dias", "2 anos e 1 mês"
+  function idadeTxt(i) {
+    if (!i) return '';
+    if (i.antesDoTermo) return 'ainda antes das 40 semanas';
+    const pl = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+    if (i.meses === 0) return pl(i.dias, 'dia', 'dias');
+    if (i.meses < 24) return pl(i.meses, 'mês', 'meses') + (i.dias ? ` e ${pl(i.dias, 'dia', 'dias')}` : '');
+    const a = Math.floor(i.meses / 12), r = i.meses % 12;
+    return pl(a, 'ano', 'anos') + (r ? ` e ${pl(r, 'mês', 'meses')}` : '');
+  }
+  const faixaMarcos = idade => (idade ? Caderneta.FAIXAS.find(f => idade.total >= f.ini && idade.total < f.fim) || null : null);
+  // Marcos: um registro por marco ({ crianca, marco, s: "P" | "A" | "NV", em }).
+  const marcoKey = (cid, marco) => `${cid}-${marco}`;
+  const marcoDe = (cid, marco) => Store.get('marco', marcoKey(cid, marco)) || null;
+  // Para a família: marcos marcados como ausentes na faixa atual e na anterior (a Caderneta manda conferir a anterior
+  // quando falta algum, p. 79). A classificação do desenvolvimento é do profissional (p. 80); o app só aponta o que conversar.
+  function marcosAtencao(c, hoje = U.today()) {
+    const f = faixaMarcos(idadeCrianca(c, hoje)?.usada);
+    if (!f) return [];
+    const ant = Caderneta.FAIXAS[f.i - 1];
+    return [ant, f].filter(Boolean).flatMap(x => x.marcos.filter(m => marcoDe(c.id, m.id)?.s === 'A').map(m => ({ marco: m, faixa: x })));
+  }
+  // Marcos da faixa anterior ainda sem marcação (só um lembrete, não um alerta).
+  function marcosSemMarcar(c, hoje = U.today()) {
+    const f = faixaMarcos(idadeCrianca(c, hoje)?.usada);
+    const ant = f && Caderneta.FAIXAS[f.i - 1];
+    return ant ? ant.marcos.filter(m => !marcoDe(c.id, m.id)) : [];
+  }
+  // Consultas da Caderneta com a data aproximada; "evento" = a consulta já agendada pelo app.
+  const consultaEventoId = (cid, nome) => `consulta-${cid}-${Schema.slug(nome)}`;
+  const consultasRecomendadas = c => (c?.nascimento ? Caderneta.CONSULTAS.map(x => ({
+    ...x,
+    data: x.dias ? U.ymd(U.addDays(U.parseYmd(c.nascimento), x.dias)) : mesesDepois(c.nascimento, x.meses),
+    evento: Store.get('evento', consultaEventoId(c.id, x.nome)) || null,
+  })) : []);
+  const medidasDe = cid => Store.list('medida').filter(m => m.crianca === cid).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+  const historiaDe = cid => Store.list('historia').filter(h => h.crianca === cid).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+  const TIPOS_HISTORIA = ['Consulta', 'Doença', 'Exame', 'Vacina', 'Internação', 'Cirurgia', 'Alergia', 'Outro'];
+
   // Itens criados por agentes/automação que ainda não foram conferidos.
   const paraRevisar = () => Schema.REVISAVEIS.flatMap(kind =>
     Store.list(kind).filter(o => o.revisado === false).map(o => ({ kind, obj: o })));
@@ -303,6 +375,8 @@ const D = (() => {
     mealId, mealOwn, meal, mealResumo, suplementosDe,
     occursOn, eventsOn, eventsBetween,
     isRecorrente, taskApplies, taskDone, tasksOn, freqLabel,
+    criancaId, crianca, mesesDepois, idadeEntre, idadeCrianca, idadeTxt, faixaMarcos, marcoKey, marcoDe, marcosAtencao, marcosSemMarcar,
+    consultaEventoId, consultasRecomendadas, medidasDe, historiaDe, TIPOS_HISTORIA,
     FAIXAS, faixaDe, pendencias, FOCO_MAX, emFoco, focoDe,
   };
 })();
