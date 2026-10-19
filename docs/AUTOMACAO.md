@@ -202,7 +202,7 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 | `evento` | **titulo**, **data**, hora, pessoa, local, repete (`nao`/`semanal`/`mensal`/`anual`), obs |
 | `tarefa` | **titulo**, tipo (`unica`/`diaria`/`semanal`/`mensal`), data, dias, dia, responsavel, local |
 | `refeicao` | **dia** (0-6), **refeicao** (`cafe`/`almoco`/`lanche`/`jantar`), texto, pessoa (vazio = família) |
-| `contato` | **nome**, categoria, telefone, whatsapp, endereco, obs |
+| `contato` | **nome**, aniversario (`AAAA-MM-DD`, ou `MM-DD` sem o ano), categoria, telefone, whatsapp, endereco, obs |
 | `recado` | **texto**, autor, fixado |
 | `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito, prazo |
 

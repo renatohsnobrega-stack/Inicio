@@ -21,7 +21,7 @@
   const NAV = [
     ['painel', 'Painel', '🏠'], ['mural', 'Mural', '📌'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
     ['alimentacao', 'Alimentação', '🍽️'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
-    ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['imprimir', 'Imprimir', '🖨️'],
+    ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['aniversarios', 'Aniversários', '🎂'], ['imprimir', 'Imprimir', '🖨️'],
     ['automacao', 'Automação', '🤖'], ['ajustes', 'Ajustes', '⚙️'],
   ];
 
@@ -81,6 +81,18 @@
         : btn('Pagar', 'pay-bill', `data-id="${esc(o.conta.id)}" data-mes="${o.mes}"`, 'small primary')}
       ${extra}
     </div>`;
+  };
+
+  // Aniversário: "15/03 · Vanessa · faz 38 anos · hoje", com botão de parabéns pelo WhatsApp.
+  const aniverRow = x => {
+    const c = x.contato;
+    const meta = [x.idade ? `faz ${x.idade} ${x.idade === 1 ? 'ano' : 'anos'}` : '', c.categoria, x.dias <= 31 ? D.quandoTxt(x.dias) : ''].filter(Boolean).join(' · ');
+    const msg = encodeURIComponent('Feliz aniversário! 🎉');
+    return `<div class="row ${x.dias === 0 ? 'status-hoje' : ''}">
+      <span class="date">${U.pad(x.dia)}/${U.pad(x.mes)}</span>
+      <span class="grow"><strong>${x.dias === 0 ? '🎉 ' : ''}${esc(c.nome)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}</span>
+      ${c.whatsapp && c.telefone && x.dias <= 1 ? `<a class="btn small primary" href="${esc(D.waLink(c.telefone))}?text=${msg}" target="_blank" rel="noopener">Parabéns</a>` : ''}
+      ${btn('✎', 'edit-contact', `data-id="${esc(c.id)}" aria-label="Editar"`, 'small ghost')}</div>`;
   };
 
   const eventLine = ({ date, ev }) => `<button type="button" class="row link" data-action="edit-event" data-id="${esc(ev.id)}">
@@ -169,6 +181,7 @@
     const compras = D.listas()[0];
     const itens = compras ? D.itensDa(compras.id).filter(i => !i.feito) : [];
     const acabando = D.estoqueAcabando();
+    const aniver = D.aniversariosProximos(D.AVISO_ANIVERSARIO, t);
 
     return pageHead(`Olá${D.eu() ? `, ${esc(D.eu())}` : ''}! Hoje é ${U.longDate(t)}`, D.casaNome(), printBtn('dia', `data-date="${t}"`)) + `
       <div class="stats">
@@ -187,6 +200,8 @@
         </div>`).join('') + `<div class="actions" style="margin-top:8px">${btn('Aprovar todos', 'review-all', '', 'small')}</div>`) : ''}
       ${acabando.length ? panel(`⚠️ Estoque acabando (${acabando.length})`, acabando.map(estoqueRow).join(''),
         `<a href="#/remedios" class="more">ver remédios</a>`) : ''}
+      ${aniver.length ? panel(`🎂 Aniversários nos próximos ${D.AVISO_ANIVERSARIO} dias (${aniver.length})`, aniver.map(aniverRow).join(''),
+        `<a href="#/aniversarios" class="more">ver todos</a>`) : ''}
       <div class="grid-2">
         ${panel(`🎯 Foco e tarefas de hoje${eu ? ` — ${esc(eu)}` : ''}`, progresso(pend)
           + (foco.length ? `<h3 class="sub">Foco do dia</h3>${foco.map(p => pendRow(p, eu)).join('')}` : '')
@@ -325,6 +340,7 @@
         <span class="dn">${d.getDate()}</span>
         ${D.eventsOn(date).map(ev => `<button type="button" class="ev" data-action="edit-event" data-id="${esc(ev.id)}">${ev.hora ? `<b>${esc(ev.hora)}</b> ` : ''}${esc(ev.titulo)}</button>`).join('')}
         ${(contasPorDia[date] || []).map(o => `<span class="ev bill ${o.pago ? 'paid' : ''}">💰 ${esc(o.conta.nome)}</span>`).join('')}
+        ${D.aniversariantesEm(date).map(x => `<button type="button" class="ev bday" data-action="edit-contact" data-id="${esc(x.contato.id)}">🎂 ${esc(x.contato.nome)}</button>`).join('')}
       </div>`);
     }
     const last = U.ymd(new Date(y, m, 0));
@@ -438,6 +454,7 @@
     const card = c => `<article class="card contact">
       <header><h3>${esc(c.nome)}</h3>${btn('Editar', 'edit-contact', `data-id="${esc(c.id)}"`, 'small ghost')}</header>
       ${c.telefone ? `<a class="tel" href="${esc(D.telLink(c.telefone))}">📞 ${esc(c.telefone)}</a>` : ''}
+      ${D.aniversarioDe(c) ? `<p class="muted small">🎂 ${esc(Schema.fmtAniversario(c.aniversario))}</p>` : ''}
       ${c.endereco ? `<p class="muted small">📍 ${esc(c.endereco)}</p>` : ''}
       ${c.obs ? `<p class="muted small">${esc(c.obs)}</p>` : ''}
       ${c.whatsapp && c.telefone ? `<div class="links"><a class="btn small" href="${esc(D.waLink(c.telefone))}" target="_blank" rel="noopener">WhatsApp</a></div>` : ''}
@@ -448,6 +465,25 @@
         ${btn('Adicionar números de emergência', 'add-emergency')}`)}
       ${grupos.length ? grupos.map(([cat, lista]) => `<h2 class="group-title ${cat === 'Emergência' ? 'alert' : ''}">${esc(cat)}</h2>
         <div class="cards">${lista.map(card).join('')}</div>`).join('') : emptyMsg('Nenhum contato cadastrado.')}`;
+  }
+
+  function aniversarios() {
+    const t = U.today();
+    const todos = D.aniversarios(t);
+    const proximos = todos.filter(x => x.dias <= 30);
+    const semData = D.contatos().filter(c => !D.aniversarioDe(c));
+    // Por mês, começando no mês atual (o aniversário de quem já passou este ano vai para o fim).
+    const mesAtual = Number(t.slice(5, 7));
+    const meses = [...Array(12)].map((_, i) => ((mesAtual - 1 + i) % 12) + 1);
+    const porMes = U.groupBy(todos, x => x.mes);
+    return pageHead('Aniversários', 'Só dos contatos cadastrados aqui. O aviso aparece no Painel 7 dias antes.',
+      btn('+ Aniversário', 'new-birthday', '', 'primary')) + `
+      ${todos.length ? `
+        ${panel('Próximos 30 dias', proximos.length ? proximos.map(aniverRow).join('') : emptyMsg('Nenhum aniversário nos próximos 30 dias.'))}
+        ${panel('O ano todo', meses.filter(m => porMes[m]).map(m => `<h3 class="sub">${U.MONTHS[m - 1]}</h3>
+          ${porMes[m].sort((a, b) => a.dia - b.dia || a.contato.nome.localeCompare(b.contato.nome)).map(aniverRow).join('')}`).join(''))}`
+      : emptyMsg('Nenhum aniversário cadastrado. Clique em “+ Aniversário” ou coloque a data em um contato (Contatos → Editar).')}
+      ${semData.length ? `<p class="muted small">${semData.length} ${semData.length === 1 ? 'contato está' : 'contatos estão'} sem data de aniversário.</p>` : ''}`;
   }
 
   function automacao() {
@@ -661,7 +697,7 @@ ${kinds}`;
       </div>`;
   }
 
-  const VIEWS = { painel, mural, contas, remedios, alimentacao, calendario, tarefas, listas, contatos, imprimir, automacao, ajustes };
+  const VIEWS = { painel, mural, contas, remedios, alimentacao, calendario, tarefas, listas, contatos, aniversarios, imprimir, automacao, ajustes };
 
   // ---------- Render ----------
   const currentRoute = () => {
@@ -778,7 +814,7 @@ ${kinds}`;
         input = `<input id="${id}" name="${f.name}" list="${id}-l" value="${esc(v)}"><datalist id="${id}-l">${f.options.map(o => `<option value="${esc(o)}">`).join('')}</datalist>`;
         break;
       default:
-        input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" value="${esc(v)}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''} ${f.step ? `step="${f.step}" inputmode="decimal"` : ''}>`;
+        input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" value="${esc(v)}" ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''} ${f.step ? `step="${f.step}" inputmode="decimal"` : ''}>`;
     }
     return `<div class="field" data-field="${f.name}"><label for="${id}">${esc(f.label)}${f.required ? ' *' : ''}</label>${input}${f.hint ? `<small class="muted">${esc(f.hint)}</small>` : ''}</div>`;
   }
@@ -795,7 +831,8 @@ ${kinds}`;
     }
   }
 
-  function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Salvar' }) {
+  // check(dados) → mensagem de erro (ou nada) antes de salvar.
+  function openForm({ title, fields, values = {}, onSave, onDelete, check, saveLabel = 'Salvar' }) {
     const dlg = document.getElementById('modal');
     dlg.innerHTML = `<form class="form" novalidate>
       <header class="form-head"><h2>${esc(title)}</h2><button type="button" class="btn icon ghost" data-close aria-label="Fechar">✕</button></header>
@@ -831,6 +868,8 @@ ${kinds}`;
         form.querySelector(`[name="${missing.name}"]`)?.focus();
         return;
       }
+      const erro = check?.(data);
+      if (erro) { alert(erro); return; }
       dlg.close();
       await onSave(data);
       toast('Salvo ✔');
@@ -969,18 +1008,21 @@ ${kinds}`;
     });
   }
 
-  function contactForm(c = {}) {
+  function contactForm(c = {}, title = '') {
     openForm({
-      title: c.id ? 'Editar contato' : 'Novo contato',
-      values: c,
+      title: title || (c.id ? 'Editar contato' : 'Novo contato'),
+      values: { ...c, aniversario: Schema.fmtAniversario(c.aniversario) || c.aniversario || '' },
       fields: [
         { name: 'nome', label: 'Nome', required: true, hint: 'Ex.: Dra. Ana (cardiologista), Escola, Encanador João' },
+        { name: 'aniversario', label: 'Aniversário (opcional)', type: 'text', placeholder: 'dd/mm ou dd/mm/aaaa',
+          hint: 'Com o ano, o app mostra a idade. O aviso aparece no Painel 7 dias antes.' },
         { name: 'categoria', label: 'Categoria', type: 'select', options: D.CATEG_CONTATO, default: 'Saúde' },
         { name: 'telefone', label: 'Telefone', type: 'tel' },
         { name: 'whatsapp', label: 'Tem WhatsApp', type: 'bool', default: false },
         { name: 'endereco', label: 'Endereço' },
         { name: 'obs', label: 'Observações', type: 'textarea', hint: 'Ex.: convênio, horário de atendimento, nº da carteirinha' },
       ],
+      check: v => (v.aniversario && !Schema.parseAniversario(v.aniversario) ? 'Aniversário: use dd/mm ou dd/mm/aaaa (ex.: 15/03 ou 15/03/1985).' : ''),
       onSave: v => Store.put('contato', { ...c, ...v }),
       onDelete: c.id ? () => Store.remove('contato', c.id) : null,
     });
@@ -1129,6 +1171,7 @@ ${kinds}`;
     },
 
     'new-contact': () => contactForm(),
+    'new-birthday': () => contactForm({ categoria: 'Família' }, 'Novo aniversário'),
     'edit-contact': el => contactForm(Store.get('contato', el.dataset.id)),
     'add-emergency': async () => {
       for (const [nome, telefone] of [['Polícia Militar', '190'], ['SAMU (ambulância)', '192'], ['Corpo de Bombeiros', '193'], ['Defesa Civil', '199']]) {

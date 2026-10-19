@@ -128,6 +128,7 @@ const Print = (() => {
         const items = [
           ...D.eventsOn(date).map(e => `<div class="ev">${e.hora ? `<b>${esc(e.hora)}</b> ` : ''}${esc(e.titulo)}</div>`),
           ...(contasPorDia[date] || []).map(o => `<div class="ev bill">💰 ${esc(o.conta.nome)}</div>`),
+          ...D.aniversariantesEm(date).map(x => `<div class="ev">🎂 ${esc(x.contato.nome)}</div>`),
         ];
         return `<td><div class="dn">${U.parseYmd(date).getDate()}</div>${items.join('')}</td>`;
       }).join('')}</tr>`).join('')}</tbody></table>`;
@@ -176,7 +177,7 @@ const Print = (() => {
     for (const [cat, lista] of grupos) {
       html += `<h2 class="sheet-person ${cat === 'Emergência' ? 'alert' : ''}">${esc(cat)}</h2>
         <table class="grid contacts"><tbody>${lista.map(c => `<tr><td><b>${esc(c.nome)}</b>${c.obs ? `<br><small>${esc(c.obs)}</small>` : ''}
-          ${c.endereco ? `<br><small>📍 ${esc(c.endereco)}</small>` : ''}</td>
+          ${c.endereco ? `<br><small>📍 ${esc(c.endereco)}</small>` : ''}${D.aniversarioDe(c) ? `<br><small>🎂 ${esc(Schema.fmtAniversario(c.aniversario).slice(0, 5))}</small>` : ''}</td>
           <td class="tel">${esc(c.telefone)}${c.whatsapp ? ' <small>(WhatsApp)</small>' : ''}</td></tr>`).join('')}</tbody></table>`;
     }
     return html;

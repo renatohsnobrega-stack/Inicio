@@ -117,6 +117,12 @@ function resumo({ dias = 7 }) {
   out.push('', `Compromissos (${eventos.length}):`);
   eventos.forEach(({ date, ev }) => out.push(`- ${U.fmtDay(date)} ${ev.hora || ''} ${ev.titulo}${ev.pessoa ? ` (${ev.pessoa})` : ''}`));
 
+  const aniver = D.aniversariosProximos(dias, hoje);
+  if (aniver.length) {
+    out.push('', `Aniversários (${aniver.length}):`);
+    aniver.forEach(x => out.push(`- ${U.fmtDay(x.data)} ${x.contato.nome}${x.idade ? ` (faz ${x.idade})` : ''} — ${D.quandoTxt(x.dias)}`));
+  }
+
   const tarefas = D.pendencias(hoje).filter(p => !p.feito && (p.faixa === 'atrasado' || p.faixa === 'hoje'));
   out.push('', `Tarefas para hoje e atrasadas (${tarefas.length}):`);
   tarefas.forEach(p => out.push(`- ${p.faixa === 'atrasado' ? `ATRASADA (${U.fmtDay(p.data)}) ` : ''}${p.titulo}${p.quem ? ` (${p.quem})` : ''}${p.kind === 'item' ? ` [lista ${p.lista?.nome || ''}]` : ''}`));
