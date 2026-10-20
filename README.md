@@ -97,6 +97,12 @@ Em **Ajustes → Baixar backup** (no modo local), depois configure a nuvem, entr
 
 ---
 
+## Notificações do Mural (Web Push)
+
+Implementação opt-in para avisar a **outra conta autenticada** quando um recado novo é publicado. Não notifica curtidas, fixações, edições ou importações. Cada pessoa ativa no próprio aparelho; no iPhone é necessário iOS 16.4+ e abrir o app pela Tela de Início.
+
+**Preparação do servidor e aprovação de implantação ainda são necessárias.** A configuração permanece desativada até lá. Veja [docs/WEB-PUSH.md](docs/WEB-PUSH.md) para segurança, passos de ativação, secrets apenas de servidor e testes locais.
+
 ## Estrutura
 
 ```
