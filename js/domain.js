@@ -227,11 +227,14 @@ const D = (() => {
     if (m.fim && date > m.fim) return false;
     return true;
   }
+  const medScheduledOn = (m, date) => medActiveOn(m, date) &&
+    (m.dias == null || (Array.isArray(m.dias) && m.dias.every(d => Number.isInteger(d) && d >= 0 && d <= 6) &&
+      (!m.dias.length || m.dias.includes(U.mondayIndex(U.parseYmd(date))))));
   const doseKey = (date, medId, hora) => `${date}|${medId}|${hora}`;
   function dosesOn(date) {
     const out = [];
     for (const m of Store.list('remedio')) {
-      if (!medActiveOn(m, date)) continue;
+      if (!medScheduledOn(m, date)) continue;
       for (const hora of m.horarios || []) {
         const key = doseKey(date, m.id, hora);
         out.push({ med: m, hora, date, key, tomado: !!Store.get('dose', key) });
@@ -251,10 +254,32 @@ const D = (() => {
     let usado = 0;
     const base = m.estoque_em && m.estoque_em < hoje ? m.estoque_em : hoje;
     for (let d = U.parseYmd(base); U.ymd(d) < hoje; d = U.addDays(d, 1)) {
-      if (medActiveOn(m, U.ymd(d))) usado += n * porDose;
+      if (medScheduledOn(m, U.ymd(d))) usado += n * porDose;
     }
     const restante = Math.max(0, Math.round((Number(m.estoque) - usado) * 100) / 100);
-    const porDia = medActiveOn(m, hoje) ? n * porDose : 0;
+    const porDia = medScheduledOn(m, hoje) ? n * porDose : 0;
+    if (Array.isArray(m.dias) && m.dias.length) {
+      // Primeiro dia de uso sem estoque suficiente, não o próximo dia do calendário.
+      // Pular semanas inteiras evita percorrer um estoque grande dia a dia.
+      const diasUso = [...new Set(m.dias)].filter(d => Number.isInteger(d) && d >= 0 && d <= 6);
+      let acaba = null;
+      if (m.ativo !== false && n * porDose > 0 && diasUso.length && m.dias.every(d => diasUso.includes(d))) {
+        const inicio = m.inicio && m.inicio > hoje ? m.inicio : hoje;
+        const cobertos = Math.floor(restante / (n * porDose));
+        let faltam = cobertos % diasUso.length;
+        let d = U.addDays(U.parseYmd(inicio), Math.floor(cobertos / diasUso.length) * 7);
+        for (let i = 0; i < 7; i++, d = U.addDays(d, 1)) {
+          if (!diasUso.includes(U.mondayIndex(d))) continue;
+          if (faltam-- === 0) {
+            if (!m.fim || U.ymd(d) <= m.fim) acaba = U.ymd(d);
+            break;
+          }
+        }
+      }
+      const dias = acaba ? Math.round((U.parseYmd(acaba) - U.parseYmd(hoje)) / 864e5) : null;
+      const status = dias == null ? 'ok' : dias === 0 ? 'acabou' : dias <= AVISO_ESTOQUE ? 'baixo' : 'ok';
+      return { restante, porDia, dias, acaba, status };
+    }
     // Dias cobertos contando hoje; "acaba" é o primeiro dia sem remédio.
     const dias = porDia ? Math.floor(restante / porDia) : null;
     const acaba = dias == null ? null : U.ymd(U.addDays(U.parseYmd(hoje), dias));
@@ -393,7 +418,7 @@ const D = (() => {
     paraRevisar, recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
     aniversarioDe, proximoAniversario, aniversarios, aniversariosProximos, aniversariantesEm, quandoTxt,
     billOccurrences, billStatus, contasAtencao,
-    medActiveOn, doseKey, dosesOn, ehSuplemento, temEstoque, estoque, estoqueAcabando, fmtQtd,
+    medActiveOn, medScheduledOn, doseKey, dosesOn, ehSuplemento, temEstoque, estoque, estoqueAcabando, fmtQtd,
     mealId, mealOwn, meal, mealResumo, suplementosDe,
     occursOn, eventsOn, eventsBetween,
     isRecorrente, taskApplies, taskDone, tasksOn, freqLabel,

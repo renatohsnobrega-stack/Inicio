@@ -67,7 +67,7 @@
       <input type="checkbox" data-action="toggle-dose" data-key="${esc(d.key)}" ${d.tomado ? 'checked' : ''}>
       <span class="time">${d.hora}</span>
       <span class="grow"><strong>${D.ehSuplemento(d.med) ? '🌿 ' : ''}${esc(d.med.nome)}</strong>${d.med.dose ? ` · ${esc(d.med.dose)}` : ''}
-        <small>${esc([d.med.pessoa, d.med.instrucoes].filter(Boolean).join(' · '))}</small></span></label>`;
+        <small>${esc([d.med.pessoa, U.medSchedule(d.med)].filter(Boolean).join(' · '))}</small></span></label>`;
 
   const billRow = (o, extra = '') => {
     const st = D.billStatus(o);
@@ -276,8 +276,7 @@
       return `<article class="card ${ativo ? '' : 'inactive'}">
         <header><h3>${medIco(m)} ${esc(m.nome)}</h3>${btn('Editar', 'edit-med', `data-id="${esc(m.id)}"`, 'small ghost')}</header>
         <p><strong>${esc(m.pessoa || '')}</strong>${m.dose ? ` · ${esc(m.dose)}` : ''}</p>
-        <div class="chips">${(m.horarios || []).map(h => `<span class="chip">${h}</span>`).join('') || '<span class="muted">sem horário fixo</span>'}</div>
-        ${m.instrucoes ? `<p class="muted">${esc(m.instrucoes)}</p>` : ''}
+        <p class="med-schedule">${esc(U.medSchedule(m))}</p>
         ${est ? `<p class="small estoque ${est.status}">📦 ${esc(estoqueTxt(m, est))} ${btn('Repor', 'repor-med', `data-id="${esc(m.id)}"`, 'small ghost')}</p>` : ''}
         <p class="muted small">${m.inicio ? `De ${U.fmtDate(m.inicio)} ` : ''}${m.fim ? `até ${U.fmtDate(m.fim)}` : 'Uso contínuo'}${ativo ? '' : ' · inativo'}</p>
       </article>`;
@@ -314,7 +313,7 @@
       ${pessoaTabs('pick-ali-pessoa', sel, '🏠 Família')}
       ${panel(`🌿 Suplementos${sel ? ` de ${esc(sel)}` : ''}`, supl.length ? supl.map(m => `<div class="row">
           <span class="time">${esc((m.horarios || []).join(', ') || '—')}</span>
-          <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([sel ? '' : m.pessoa, m.dose, m.instrucoes].filter(Boolean).join(' · '))}</small></span>
+          <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([sel ? '' : m.pessoa, m.dose, U.medSchedule(m)].filter(Boolean).join(' · '))}</small></span>
           ${btn('Editar', 'edit-med', `data-id="${esc(m.id)}"`, 'small ghost')}</div>`).join('')
         : emptyMsg('Nenhum suplemento. Eles são cadastrados em Remédios e aparecem aqui também.'),
         btn('+ Suplemento', 'new-med', `data-categoria="suplemento" data-pessoa="${esc(sel)}"`, 'small'))}
@@ -652,7 +651,7 @@
           btn('+ Medida', 'new-medida', `data-crianca="${esc(c.id)}"`, 'small'))}
       <div class="grid-2">
         ${panel('💊 Remédios e suplementos', remedios.length ? remedios.map(m => `<div class="row"><span class="ico">${medIco(m)}</span>
-          <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([m.dose, (m.horarios || []).join(', '), m.fim ? `até ${U.fmtDate(m.fim)}` : ''].filter(Boolean).join(' · '))}</small></span></div>`).join('')
+          <span class="grow"><strong>${esc(m.nome)}</strong><small>${esc([m.dose, U.medSchedule(m), m.fim ? `até ${U.fmtDate(m.fim)}` : ''].filter(Boolean).join(' · '))}</small></span></div>`).join('')
           : emptyMsg('Nenhum em uso.'), btn('ver em Remédios', 'goto-remedios', `data-pessoa="${esc(nome)}"`, 'small'))}
         ${panel('📖 História médica', historia.length ? historia.map(h => `<button type="button" class="row link" data-action="edit-historia" data-id="${esc(h.id)}">
           <span class="date">${U.fmtDate(h.data)}</span>
@@ -789,7 +788,7 @@ ${kinds}${filhos}`;
     const linhas = [`# Rotina da casa — ${U.longDate(t)}`, ''];
     const occ = D.billOccurrences(U.thisMonth());
     linhas.push(`## Contas de ${U.monthLabel(U.thisMonth())}`, ...occ.map(o => `- ${U.fmtDay(o.venc)} ${o.conta.nome}: ${U.brl(o.valor)} (${o.pago ? 'paga' : D.STATUS_LABEL[D.billStatus(o)].toLowerCase()})`), '');
-    linhas.push('## Remédios e suplementos', ...Store.list('remedio').filter(m => D.medActiveOn(m, t)).map(m => `- ${D.ehSuplemento(m) ? '[suplemento] ' : ''}${m.nome} ${m.dose || ''} — ${m.pessoa || ''} — ${(m.horarios || []).join(', ')} ${m.instrucoes ? `(${m.instrucoes})` : ''}`), '');
+    linhas.push('## Remédios e suplementos', ...Store.list('remedio').filter(m => D.medActiveOn(m, t)).map(m => `- ${D.ehSuplemento(m) ? '[suplemento] ' : ''}${m.nome} ${m.dose || ''} — ${m.pessoa || ''} — ${U.medSchedule(m)} ${m.instrucoes ? `(${m.instrucoes})` : ''}`), '');
     const acabando = D.estoqueAcabando();
     if (acabando.length) linhas.push('## Estoque acabando', ...acabando.map(({ med, est }) => `- ${med.nome} (${med.pessoa || ''}): ${estoqueTxt(med, est)}`), '');
     linhas.push('## Compromissos (30 dias)', ...D.eventsBetween(t, U.ymd(U.addDays(new Date(), 30))).map(({ date, ev }) => `- ${U.fmtDate(date)} ${ev.hora || ''} ${ev.titulo}`), '');
@@ -1104,6 +1103,7 @@ ${kinds}${filhos}`;
         { name: 'pessoa', label: 'Para quem', type: 'combo', options: D.pessoas(), default: D.pessoas()[0] },
         { name: 'dose', label: 'Dose', hint: 'Ex.: 1 comprimido de 50mg, 10 gotas' },
         { name: 'horarios', label: 'Horários', type: 'times', hint: 'Separe por vírgula. Ex.: 08:00, 14:00, 20:00' },
+        { name: 'dias', label: 'Dias da semana', type: 'weekdays', hint: 'Nenhum selecionado = todos os dias. Ex.: Seg, Qua e Sex.' },
         { name: 'instrucoes', label: 'Como tomar', hint: 'Ex.: em jejum, após o almoço, com água' },
         { name: 'inicio', label: 'Início', type: 'date', default: U.today() },
         { name: 'fim', label: 'Fim (vazio = uso contínuo)', type: 'date' },

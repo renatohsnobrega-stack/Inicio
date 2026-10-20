@@ -39,6 +39,7 @@ const Schema = (() => {
         pessoa: f('texto', 'Para quem'),
         dose: f('texto', 'Dose (ex.: "1 comprimido 50mg")'),
         horarios: f('lista de "HH:MM"', 'Horários (ex.: ["08:00","20:00"])'),
+        dias: f('lista de números 0-6', 'Dias de uso: 0 = segunda … 6 = domingo. Ausente ou [] = todos os dias'),
         instrucoes: f('texto', 'Como tomar (ex.: "em jejum")'),
         inicio: f('data AAAA-MM-DD', 'Início do tratamento'),
         fim: f('data AAAA-MM-DD', 'Fim do tratamento (vazio = uso contínuo)'),
@@ -315,6 +316,11 @@ const Schema = (() => {
         str('nome', 'pessoa', 'dose', 'instrucoes', 'unidade');
         o.categoria = pickEnum(o.categoria, [[/supl|vitamin|suppl/, 'suplemento']], 'remedio');
         o.horarios = U.parseTimes(o.horarios || []);
+        if (o.dias != null) {
+          const dias = Array.isArray(o.dias) ? o.dias : String(o.dias).split(/[,;\s]+/).filter(Boolean);
+          // Não usar toWeekday: nele 7 vira segunda, o que alteraria uma prescrição inválida.
+          o.dias = [...new Set(dias.map(d => typeof d === 'number' || /^[0-6]$/.test(String(d).trim()) ? Number(d) : d))].sort((a, b) => a - b);
+        }
         o.ativo = toBool(o.ativo, true);
         if (o.inicio) o.inicio = toYmd(o.inicio);
         if (o.fim) o.fim = toYmd(o.fim);
@@ -403,6 +409,7 @@ const Schema = (() => {
     const errs = Object.entries(def.campos).filter(([k, c]) => c.obrig && (o[k] === '' || o[k] == null)).map(([k]) => `falta "${k}"`);
     if (kind === 'conta' && o.tipo === 'unica' && !o.data) errs.push('conta única precisa de "data"');
     if (kind === 'conta' && o.tipo === 'mensal' && !o.dia) errs.push('conta mensal precisa de "dia"');
+    if (kind === 'remedio' && o.dias != null && (!Array.isArray(o.dias) || o.dias.some(d => !Number.isInteger(d) || d < 0 || d > 6))) errs.push('"dias" inválido (use números de 0 = segunda a 6 = domingo)');
     if (kind === 'refeicao' && !/^[0-6]-(cafe|almoco|lanche|jantar)(-[a-z0-9-]+)?$/.test(o.id)) errs.push('"dia" ou "refeicao" inválido');
     if (kind === 'item' && !o.lista && !o.lista_nome) errs.push('informe "lista_nome"');
     if (kind === 'contato' && o.aniversario && !parseAniversario(o.aniversario)) errs.push('"aniversario" inválido (use DD/MM ou DD/MM/AAAA)');
@@ -412,7 +419,7 @@ const Schema = (() => {
   function resumo(kind, o) {
     switch (kind) {
       case 'conta': return `${o.nome} — ${U.brl(o.valor)} — ${o.tipo === 'unica' ? `vence ${U.fmtDate(o.data)}` : `todo dia ${o.dia}`}`;
-      case 'remedio': return `${o.categoria === 'suplemento' ? 'Suplemento: ' : ''}${o.nome}${o.dose ? ` (${o.dose})` : ''} — ${o.pessoa || '—'} — ${(o.horarios || []).join(', ') || 'sem horário'}${o.estoque !== '' && o.estoque != null ? ` — estoque ${o.estoque}${o.unidade ? ' ' + o.unidade : ''}` : ''}`;
+      case 'remedio': return `${o.categoria === 'suplemento' ? 'Suplemento: ' : ''}${o.nome}${o.dose ? ` (${o.dose})` : ''} — ${o.pessoa || '—'} — ${U.medSchedule(o)}${o.estoque !== '' && o.estoque != null ? ` — estoque ${o.estoque}${o.unidade ? ' ' + o.unidade : ''}` : ''}`;
       case 'evento': return `${o.titulo} — ${U.fmtDate(o.data)}${o.hora ? ` às ${o.hora}` : ''}${o.repete && o.repete !== 'nao' ? ` (${o.repete})` : ''}`;
       case 'tarefa': return `${o.titulo} — ${{ unica: o.data ? `até ${U.fmtDate(o.data)}` : 'uma vez', diaria: 'todo dia', semanal: 'semanal', mensal: `todo dia ${o.dia}` }[o.tipo] || o.tipo}${o.responsavel ? ` — ${o.responsavel}` : ''}`;
       case 'refeicao': { const [wd, slot] = String(o.id).split('-'); return `${U.WD[wd] || '?'} · ${SLOTS[slot] || '?'}${o.pessoa ? ` (${o.pessoa})` : ''}: ${o.texto || '—'}`; }
