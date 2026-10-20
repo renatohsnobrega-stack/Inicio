@@ -63,6 +63,16 @@ const U = (() => {
     return [...new Set(out)].sort();
   };
 
+  // Sem dias informados = uso diário (compatibilidade com os registros antigos).
+  const medSchedule = m => {
+    const horas = parseTimes(m.horarios || []);
+    if (m.dias != null && (!Array.isArray(m.dias) || m.dias.some(d => !Number.isInteger(d) || d < 0 || d > 6))) return 'Dias inválidos — revise o cronograma';
+    const dias = Array.isArray(m.dias) && m.dias.length
+      ? [...new Set(m.dias)].sort((a, b) => a - b).map(d => WDS[d]).join('/') : '';
+    const vezes = horas.length ? `${horas.length}× ${dias ? 'nos dias de uso' : 'ao dia'}` : 'sem horário fixo';
+    return [dias, vezes, horas.join(', ')].filter(Boolean).join(' · ');
+  };
+
   const uid = () => (crypto.randomUUID ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
@@ -85,6 +95,6 @@ const U = (() => {
   return {
     pad, ymd, parseYmd, addDays, addMonths, daysInMonth, mondayIndex, startOfWeek, today, thisMonth,
     WD, WDS, MONTHS, monthLabel, fmtDate, fmtDay, longDate, esc, nl2br, brl, parseMoney, parseTimes,
-    uid, groupBy, timeAgo,
+    medSchedule, uid, groupBy, timeAgo,
   };
 })();

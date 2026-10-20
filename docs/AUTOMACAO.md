@@ -214,13 +214,20 @@ O formato completo fica em [`js/schema.js`](../js/schema.js). O botão **Copiar 
 | tipo | campos principais |
 |---|---|
 | `conta` | **nome**, valor, tipo (`mensal`/`unica`), dia, data, categoria, responsavel, forma, codigo, obs |
-| `remedio` | **nome**, categoria (`remedio`/`suplemento`), pessoa, dose, horarios (`["08:00","20:00"]`), instrucoes, inicio, fim, ativo, estoque, unidade, por_dose, estoque_em |
+| `remedio` | **nome**, categoria (`remedio`/`suplemento`), pessoa, dose, horarios (`["08:00","20:00"]`), dias (opcional, 0–6), instrucoes, inicio, fim, ativo, estoque, unidade, por_dose, estoque_em |
 | `evento` | **titulo**, **data**, hora, pessoa, local, repete (`nao`/`semanal`/`mensal`/`anual`), obs |
 | `tarefa` | **titulo**, tipo (`unica`/`diaria`/`semanal`/`mensal`), data, dias, dia, responsavel, local |
 | `refeicao` | **dia** (0-6), **refeicao** (`cafe`/`almoco`/`lanche`/`jantar`), texto, pessoa (vazio = família) |
 | `contato` | **nome**, aniversario (`AAAA-MM-DD`, ou `MM-DD` sem o ano), categoria, telefone, whatsapp, endereco, obs |
 | `recado` | **texto**, autor, fixado |
 | `item` | **texto**, lista_nome (ex.: `"Compras"`, criada se não existir), feito, prazo |
+
+Em remédios, `dias` ausente, `null` ou `[]` mantém o uso diário, inclusive nos registros antigos.
+Uma lista não vazia restringe as doses aos dias exatos, sem alterar os horários.
+Exemplo de dados (não é uma prescrição nem uma gravação):
+`{"nome":"Neutrofer","dias":[0,2,4],"horarios":["19:00"]}` → **Seg/Qua/Sex · 1× nos dias de uso · 19:00**.
+Valores fora de 0–6 são inválidos; não são convertidos para outro dia.
+Para voltar ao uso diário numa atualização por API, envie `"dias":[]` explicitamente; omitir o campo preserva o valor existente.
 
 Só com chave **Total + filhos**:
 

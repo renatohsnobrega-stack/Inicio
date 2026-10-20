@@ -60,7 +60,7 @@ const Print = (() => {
 
   function remedios({ week }) {
     const days = weekDays(week);
-    const meds = Store.list('remedio').filter(m => days.some(d => D.medActiveOn(m, d)));
+    const meds = Store.list('remedio').filter(m => days.some(d => D.medScheduledOn(m, d)));
     let html = head('Remédios da semana', `${U.fmtDate(days[0])} a ${U.fmtDate(days[6])} — marque ao tomar`);
     if (!meds.length) return html + empty('Nenhum remédio ativo nesta semana.');
     const porPessoa = U.groupBy(meds, m => m.pessoa || 'Geral');
@@ -73,7 +73,7 @@ const Print = (() => {
         ${days.map(dayTh).join('')}</tr></thead><tbody>
         ${rows.map(({ m, h }) => `<tr><td class="time">${h}</td><td><b>${esc(m.nome)}</b>${D.ehSuplemento(m) ? ' <small>(suplemento)</small>' : ''}</td>
           <td>${esc(m.dose)}${m.instrucoes ? `<br><small>${esc(m.instrucoes)}</small>` : ''}</td>
-          ${days.map(d => `<td class="c">${D.medActiveOn(m, d) ? BOX : '<span class="na">—</span>'}</td>`).join('')}</tr>`).join('')}
+          ${days.map(d => `<td class="c">${D.medScheduledOn(m, d) ? BOX : '<span class="na">—</span>'}</td>`).join('')}</tr>`).join('')}
       </tbody></table>`;
     }
     return html;
@@ -89,7 +89,7 @@ const Print = (() => {
         ${U.WD.map((_, wd) => `<td>${cell(wd, s.id)}</td>`).join('')}</tr>`).join('')}</tbody></table>
       ${supl.length ? `<section class="sheet-sec"><h2>🌿 Suplementos</h2><ul class="sheet-list cols">${supl.map(m =>
         `<li><b class="time">${esc((m.horarios || []).join(', ') || '—')}</b> ${esc(m.nome)}
-          <small>${esc([pessoa ? '' : m.pessoa, m.dose, m.instrucoes].filter(Boolean).join(' · '))}</small></li>`).join('')}</ul></section>` : ''}
+          <small>${esc([pessoa ? '' : m.pessoa, m.dose, U.medSchedule(m)].filter(Boolean).join(' · '))}</small></li>`).join('')}</ul></section>` : ''}
       ${obs ? `<footer class="sheet-notes"><h2>Observações</h2><p>${nl2br(obs)}</p></footer>` : ''}`;
   }
 
