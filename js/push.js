@@ -54,7 +54,7 @@ const MuralPush = (() => {
       }
       await Store.rpc('push_subscribe', { p_subscription: sub.toJSON() });
       active = true;
-      message = 'Ativadas neste aparelho para a conta conectada. Apenas novos recados da outra pessoa geram aviso.';
+      message = 'Ativadas neste aparelho para a conta conectada. Você pode receber avisos de novos recados e, às 08h e a cada 2 horas até 20h, lembretes das tarefas com vencimento hoje que ainda estiverem pendentes sob sua responsabilidade.';
     } catch (e) {
       if (created && sub) await sub.unsubscribe().catch(() => {});
       message = 'Não foi possível ativar: ' + (e.message || e);
