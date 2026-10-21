@@ -41,7 +41,11 @@ const Store = (() => {
   }
 
   async function signOut() {
-    if (sb) await sb.auth.signOut();
+    if (sb && typeof MuralPush !== 'undefined') await MuralPush.disable();
+    if (sb) {
+      const { error } = await sb.auth.signOut();
+      if (error) throw error;
+    }
     user = null;
     location.reload();
   }
@@ -103,6 +107,19 @@ const Store = (() => {
     await write(() => sb.from('registros').delete().eq('kind', kind).eq('id', id));
   }
 
+  async function publishRecado(data) {
+    // Chave vazia mantém o app compatível antes da ativação manual do backend.
+    if (mode === 'local' || !configPushEnabled()) return put('recado', data);
+    const obj = Schema.normalize('recado', { ...data, id: U.uid() });
+    // A fila só nasce nesta publicação explícita. Importações/upserts não disparam push.
+    await rpc('push_publish_recado', { p_id: obj.id, p_data: obj });
+    setRow('recado', obj.id, obj);
+    emit();
+    return obj;
+  }
+
+  const configPushEnabled = () => !!(window.APP_CONFIG || {}).muralPushPublicKey;
+
   async function removeMany(kind, ids) {
     if (!ids.length) return;
     ids.forEach(id => { if (cache[kind]) delete cache[kind][id]; });
@@ -140,7 +157,7 @@ const Store = (() => {
   }
 
   return {
-    init, signIn, signOut, loadCloud, list, get, put, remove, removeMany, exportAll, importAll, rpc,
+    init, signIn, signOut, loadCloud, list, get, put, publishRecado, remove, removeMany, exportAll, importAll, rpc,
     config: () => window.APP_CONFIG || {},
     mode: () => mode,
     user: () => user,

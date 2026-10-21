@@ -406,9 +406,18 @@
       ${feitas.length ? `<details class="panel"><summary>Concluídas antes de hoje</summary>${feitas.map(feitaRow).join('')}</details>` : ''}`;
   }
 
+  function pushPanel() {
+    const p = MuralPush.status();
+    return panel('Notificações neste aparelho', `<p class="muted">${esc(p.reason || p.message || (p.active ? 'Ativadas para a conta conectada.' : 'Receba um aviso quando a outra pessoa publicar um novo recado.'))}</p>
+      <p class="muted small">Cada pessoa deve entrar com sua própria conta. O campo “De” é só assinatura, não determina quem recebe o aviso.</p>
+      <div class="actions">${btn(p.busy ? 'Aguarde…' : (p.active ? 'Revalidar notificações' : 'Ativar notificações'), 'push-enable', p.busy || p.reason ? 'disabled' : '', 'primary')}
+      ${btn('Desativar neste aparelho', 'push-disable', p.busy ? 'disabled' : '')}</div>`);
+  }
+
   function mural() {
     const lista = D.recados();
     return pageHead('Mural da família', 'Recados rápidos entre vocês — aparecem no painel e no celular do outro') + `
+      ${pushPanel()}
       <form class="panel post-form" data-form="recado">
         <textarea name="texto" rows="3" required placeholder="Escreva um recado… ex.: “Comprei o remédio da sua mãe”, “Chego tarde hoje”, “Não esquecer a reunião da escola”"></textarea>
         <div class="post-actions">
@@ -1383,6 +1392,8 @@ ${kinds}${filhos}`;
     'print-param': el => { if (el.value || el.dataset.key === 'pessoa') state.print[el.dataset.key] = el.value; render(true); },
     'do-print': () => Print.print(state.print.sheet, state.print),
 
+    'push-enable': async () => { try { await MuralPush.enable(); } catch (err) { toast(err.message || String(err)); } },
+    'push-disable': async () => { try { await MuralPush.disable(); toast('Notificações desativadas neste aparelho.'); } catch { toast('Não foi possível desativar. Verifique a conexão e tente novamente.'); } },
     'pin-note': el => { const r = Store.get('recado', el.dataset.id); Store.put('recado', { ...r, fixado: !r.fixado }); },
     'del-note': el => { if (confirm('Excluir este recado?')) Store.remove('recado', el.dataset.id); },
     'like-note': el => {
@@ -1503,7 +1514,7 @@ ${kinds}${filhos}`;
       forms[el.dataset.kind]({ ...Store.get(el.dataset.kind, el.dataset.id), revisado: true });
     },
 
-    'sign-out': () => Store.signOut(),
+    'sign-out': async () => { try { await Store.signOut(); } catch { toast('Não foi possível desativar as notificações antes de sair. Verifique a conexão e tente novamente.'); } },
     export: () => {
       const blob = new Blob([JSON.stringify(Store.exportAll(), null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -1556,7 +1567,15 @@ ${kinds}${filhos}`;
         const texto = String(f.get('texto') || '').trim();
         if (!texto) return;
         if (!D.eu()) D.setEu(f.get('autor'));
-        await Store.put('recado', { texto, autor: f.get('autor'), fixado: f.get('fixado') === 'on', em: new Date().toISOString(), curtidas: [] });
+        const submit = form.querySelector('button[type=submit]');
+        submit.disabled = true;
+        try {
+          await Store.publishRecado({ texto, autor: f.get('autor'), fixado: f.get('fixado') === 'on', em: new Date().toISOString(), curtidas: [] });
+        } catch {
+          toast('Não foi possível confirmar a publicação. Verifique a conexão e o Mural antes de tentar novamente.');
+          submit.disabled = false;
+          return;
+        }
         render(true);
         toast('Recado publicado ✔');
         return;
@@ -1664,6 +1683,8 @@ ${kinds}${filhos}`;
     bindEvents();
     render(true);
     agendarEstoque();
+    MuralPush.subscribe(() => render());
+    void MuralPush.init();
   }
 
   async function boot() {
