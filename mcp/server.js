@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Conector MCP do Casa Organizada — deixa o Claude (Desktop ou Code) ler e gravar no app.
+// Conector MCP do Elinor — deixa o Claude (Desktop ou Code) ler e gravar no app.
 // Sem dependências: precisa só do Node 18+.
 //
 // Variáveis de ambiente:
@@ -233,8 +233,8 @@ async function handle(msg) {
         return send({ id, result: {
           protocolVersion: params?.protocolVersion || '2025-06-18',
           capabilities: { tools: {} },
-          serverInfo: { name: 'casa-organizada', version: '1.1.0' },
-          instructions: 'App Casa Organizada (rotina da casa). Para perguntas, comece por casa_resumo; para achar algo, casa_listar com busca.',
+          serverInfo: { name: 'elinor', version: '1.1.0' },
+          instructions: 'App Elinor (rotina da casa). Para perguntas, comece por casa_resumo; para achar algo, casa_listar com busca.',
         } });
       case 'ping':
         return send({ id, result: {} });

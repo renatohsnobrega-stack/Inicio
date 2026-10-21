@@ -508,7 +508,7 @@ const Schema = (() => {
         `  - ${c}${x.obrig ? ' (obrigatório)' : ''}: ${x.tipo} — ${x.desc}`).join('\n')}`).join('\n\n');
     const exemplo = {};
     ['conta', 'remedio', 'evento', 'item'].forEach(k => { exemplo[KINDS[k].plural] = [KINDS[k].exemplo]; });
-    return `Quero cadastrar informações no meu app de organização da casa ("Casa Organizada").
+    return `Quero cadastrar informações no meu app de organização da casa ("Elinor").
 Com base na nossa conversa (ou no conteúdo que eu enviar a seguir), gere SOMENTE um bloco JSON no formato abaixo.
 
 Regras:

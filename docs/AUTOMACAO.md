@@ -1,6 +1,6 @@
 # 🤖 Automação: deixar a IA preencher o app
 
-O Casa Organizada aceita dados de fora por **6 caminhos**. Do mais simples ao mais automático:
+O Elinor aceita dados de fora por **6 caminhos**. Do mais simples ao mais automático:
 
 | Caminho | Precisa de | Bom para |
 |---|---|---|
@@ -132,7 +132,7 @@ batem com o que aparece na tela.
 ```json
 {
   "mcpServers": {
-    "casa-organizada": {
+    "elinor": {
       "command": "node",
       "args": ["/CAMINHO/ATE/Inicio/mcp/server.js"],
       "env": {
@@ -148,7 +148,7 @@ batem com o que aparece na tela.
 **Claude Code:**
 
 ```bash
-claude mcp add casa-organizada \
+claude mcp add elinor \
   -e CASA_SUPABASE_URL=https://SEU-PROJETO.supabase.co \
   -e CASA_ANON_KEY=... -e CASA_CHAVE=casa_... \
   -- node /CAMINHO/ATE/Inicio/mcp/server.js
@@ -259,7 +259,7 @@ Para perguntas pontuais ("quanto gastamos com mercado?"), use o MCP do próprio 
 
 ### 📧 Contas do e-mail (Claude com Gmail, Manus, Gemini)
 
-> Você tem acesso ao meu Gmail e à API do app Casa Organizada (instruções abaixo).
+> Você tem acesso ao meu Gmail e à API do app Elinor (instruções abaixo).
 > 1. Procure e-mails dos últimos 15 dias com boletos, faturas, cobranças ou contas (luz, água, gás, internet, telefone, cartão, condomínio, escola, plano de saúde, IPTU/IPVA).
 > 2. Para cada conta encontrada, extraia: nome do fornecedor, valor, data de vencimento e linha digitável ou Pix (se houver).
 > 3. Grave com `agente_salvar`: cada registro com `"tipo": "conta"` e `"id": "gmail-<id da mensagem>"`; nos `dados`, use `"tipo": "unica"`, a `"data"` do vencimento e `"origem": "gmail"`.

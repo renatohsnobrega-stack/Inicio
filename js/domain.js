@@ -13,7 +13,7 @@ const D = (() => {
 
   const LISTAS_SUGERIDAS = [['🛒', 'Compras'], ['💊', 'Farmácia'], ['🔧', 'Casa / manutenção'], ['🎁', 'Presentes e desejos']];
   const CATEG_CONTATO = Schema.CATEG_CONTATO;
-  const CORES = ['#2f6f5e', '#b0527a', '#4a6fa5', '#b7791f', '#7a5aa8'];
+  const CORES = ['#23392F', '#8C3B4A', '#2C4A6E', '#8A5A2B', '#5B4B8A'];
   const UNIDADES = ['comprimidos', 'cápsulas', 'ml', 'gotas', 'sachês', 'doses', 'unidades'];
   const AVISO_ESTOQUE = 7; // dias de antecedência do aviso de estoque acabando
   const AVISO_ANIVERSARIO = 7; // dias de antecedência do aviso de aniversário no Painel
