@@ -9,6 +9,7 @@ const Store = (() => {
   let mode = 'local';
   let sb = null;
   let user = null;
+  let profileName = '';
   let onError = e => alert('Não foi possível salvar: ' + (e.message || e));
   const listeners = new Set();
   const emit = () => listeners.forEach(fn => fn());
@@ -38,6 +39,7 @@ const Store = (() => {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
     user = data.user;
+    profileName = '';
   }
 
   async function signOut() {
@@ -47,6 +49,7 @@ const Store = (() => {
       if (error) throw error;
     }
     user = null;
+    profileName = '';
     location.reload();
   }
 
@@ -67,6 +70,13 @@ const Store = (() => {
       data.forEach(r => setRow(r.kind, r.id, r.data));
       if (data.length < size) break;
     }
+    // O servidor retorna somente o nome vinculado a auth.uid(), nunca perfis alheios.
+    // Sem a migração, mantém o fallback manual isolado por conta (não o dono do aparelho).
+    profileName = '';
+    try {
+      const { data, error } = await sb.rpc('current_member_profile');
+      if (!error && typeof data === 'string') profileName = data;
+    } catch { /* indisponível: identificação manual por conta */ }
     // Quando o outro alterar algo, a tela atualiza sozinha.
     sb.channel('registros')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'registros' }, p => {
@@ -161,6 +171,7 @@ const Store = (() => {
     config: () => window.APP_CONFIG || {},
     mode: () => mode,
     user: () => user,
+    profileName: () => profileName,
     subscribe: fn => listeners.add(fn),
     setErrorHandler: fn => { onError = fn; },
   };
