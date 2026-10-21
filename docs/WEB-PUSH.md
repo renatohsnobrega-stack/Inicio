@@ -1,6 +1,6 @@
 # Notificações de novos recados
 
-**Implementação para revisão. Não está ativa só por mesclar o código.** A configuração pública vem vazia para preservar o funcionamento atual até a preparação do servidor. Não executar a migração ou configurar secrets em produção sem aprovação específica.
+**Backend ativado com aprovação do responsável.** Migração isolada aplicada; contas Auth de Renato e Vanessa vinculadas; VAPID e segredo de despacho guardados no Supabase; Edge Function `mural-push` ativa; cron por minuto com Vault. O frontend contém somente a chave VAPID pública. Cada pessoa ainda precisa consentir no próprio aparelho. Não foram enviados recados nem pushes de teste.
 
 ## O que muda
 
@@ -32,7 +32,7 @@ Não há necessidade de escolher um provedor adicional: usamos Web Push padrão,
 5. **Só depois de validar o backend**, colocar exclusivamente a chave VAPID pública em `config.js → muralPushPublicKey`. Revisar/mesclar a PR e publicar o frontend apenas com autorização. A chave vazia mantém o Mural antigo funcionando, sem pedir permissões ou gerar push.
 6. Cada pessoa executa os passos no próprio iPhone. Não cadastrar inscrições de terceiros nem enviar recados de teste reais. Um teste fim a fim em celulares reais deve ser combinado separadamente; os testes deste projeto são locais/mocados.
 
-A aprovação técnica deve contemplar: criação das tabelas e funções, trigger, vínculo dos dois UUIDs, armazenamento dos novos secrets, implantação da função, criação do agendamento e posterior publicação do frontend. **Nenhuma dessas ações foi executada em produção durante esta implementação.**
+A aprovação técnica deve contemplar: criação das tabelas e funções, trigger, vínculo dos dois UUIDs, armazenamento dos novos secrets, implantação da função, criação do agendamento e posterior publicação do frontend. **A implantação foi autorizada e executada; novas alterações de produção ou testes reais continuam exigindo autorização própria.**
 
 ### Vincular as contas (administração; substituir UUIDs reais)
 
@@ -53,7 +53,7 @@ Authorization: Bearer <MURAL_PUSH_DISPATCH_SECRET do cofre>
 Content-Type: application/json
 ```
 
-Pode ser o Cron do próprio Supabase com chamada HTTP e o token guardado no Vault. Ao aprovar a implantação, criar o job e o secret no Vault usando administração autenticada; não colocar credenciais em SQL versionado. O dispatcher busca sua própria fila e não aceita destinatário, endpoint ou texto fornecido pelo chamador. Não depende de Database Webhook público.
+A implantação usa o Cron do próprio Supabase com a extensão HTTP síncrona e o segredo guardado no Vault. O script administrativo reproduzível é `supabase/ops/mural-push-schedule.sql`; contém somente o nome do secret, nunca seu valor. O job `mural-push-every-minute` chama uma função sem parâmetros, sem permissão para `anon`, `authenticated` ou `service_role`. O HTTP tem limite de conexão de 5 s e total de 55 s. Não usa `pg_net`, evitando persistir headers de autorização em sua fila interna. O dispatcher busca sua própria fila e não aceita destinatário, endpoint ou texto fornecido pelo chamador. Não depende de Database Webhook público.
 
 ## Limites e manutenção
 
