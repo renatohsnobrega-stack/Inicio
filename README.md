@@ -99,9 +99,11 @@ Em **Ajustes → Baixar backup** (no modo local), depois configure a nuvem, entr
 
 ---
 
-## Notificações do Mural (Web Push)
+## Notificações do Mural e das tarefas (Web Push)
 
 Implementação opt-in para avisar a **outra conta autenticada** quando um recado novo é publicado. Não notifica curtidas, fixações, edições ou importações. Cada pessoa ativa no próprio aparelho; no iPhone é necessário iOS 16.4+ e abrir o app pela Tela de Início.
+
+Nas **tarefas**, há um aviso agrupado às **08h, 10h, 12h, 14h, 16h, 18h e 20h (Porto Alegre)**, somente no dia previsto e para o proprietário que ainda tenha pendências. Concluiu tudo, param os avisos. **Ambos** avisa os dois; sem responsável não avisa ninguém. Não duplica a mesma conta no mesmo ciclo, não cria resumos no Mural e não mostra detalhes das tarefas na tela bloqueada.
 
 **Backend ativado mediante aprovação; falta cada pessoa permitir notificações no próprio celular.** Veja [docs/WEB-PUSH.md](docs/WEB-PUSH.md) para segurança, passos de ativação, secrets apenas de servidor e testes locais. Não foram enviados pushes de teste.
 

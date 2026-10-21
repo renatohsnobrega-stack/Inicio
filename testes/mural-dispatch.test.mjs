@@ -11,6 +11,8 @@ function setup({ send = async () => ({ statusCode: 201 }), jobs = [baseJob], del
     if (name === 'mural_push_claim') return Response.json(jobs);
     if (name === 'mural_push_delivery') return Response.json(delivery);
     if (name === 'mural_push_finish') return Response.json(null);
+    if (name === 'task_push_prepare_daily') return Response.json(null);
+    if (name === 'task_push_claim') return Response.json([]);
     throw new Error(`Unexpected RPC ${name}`);
   };
   const handler = createDispatcher({ supabaseUrl: 'https://db.example', serviceRoleKey: 'service-secret', dispatchSecret: 'dispatch-secret', fetchImpl,
@@ -39,7 +41,9 @@ test('sends generic payload only after database revalidation', async () => {
   const response = await handler(request());
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { claimed: 1, sent: 1, retried: 0, suppressed: 0 });
-  assert.deepEqual(calls.map(x => x.name), ['mural_push_claim', 'mural_push_delivery', 'mural_push_finish']);
+  assert.deepEqual(calls.filter(x => x.name.startsWith('mural_push_')).map(x => x.name), ['mural_push_claim', 'mural_push_delivery', 'mural_push_finish']);
+  assert.ok(calls.some(x => x.name === 'task_push_prepare_daily'));
+  assert.ok(calls.some(x => x.name === 'task_push_claim'));
   const [url, keys, payload, options] = sends[0];
   assert.equal(url, endpoint);
   assert.deepEqual(keys, { p256dh: 'p256dh', auth: 'auth' });
@@ -63,5 +67,5 @@ test('suppresses delivery if membership/subscription revalidation returns empty'
   const response = await handler(request());
   assert.equal((await response.json()).suppressed, 1);
   assert.equal(sends.length, 0);
-  assert.equal(calls.length, 2); // DB marks claim suppressed/dead on empty delivery result
+  assert.equal(calls.filter(x => x.name.startsWith('mural_push_')).length, 2); // DB suppresses claim after revalidation returns empty
 });

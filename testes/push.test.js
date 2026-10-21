@@ -64,3 +64,17 @@ test('clique abre/foca somente o Mural no escopo do app', async () => {
   handlers.notificationclick({ notification: { data: { url: 'https://evil.test' }, close() {} }, waitUntil: p => work = p }); await work;
   assert.deepEqual(calls, [['navigate', 'https://example.org/Inicio/#/mural'], 'focus']);
 });
+
+test('task push uses generic copy, distinct tag, and only the local Tasks route', async () => {
+  const { handlers, calls } = worker(); let work;
+  handlers.push({ data: { json: () => ({ kind: 'task_daily', title: 'private task title', body: 'secret task', url: 'https://evil.test' }) }, waitUntil: p => work = p }); await work;
+  assert.equal(calls[0][0], 'Tarefas de hoje');
+  assert.equal(calls[0][1].body, 'Você tem tarefas para hoje. Abra o Elinor para conferir.');
+  assert.equal(calls[0][1].tag, 'casa-tarefas-dia');
+  assert.equal(calls[0][1].renotify, true);
+  assert.equal(calls[0][1].data.url, 'https://example.org/Inicio/#/tarefas');
+  assert.equal(JSON.stringify(calls).includes('secret task'), false);
+  let click;
+  handlers.notificationclick({ notification: { data: { kind: 'task_daily', url: 'https://evil.test' }, close() {} }, waitUntil: p => click = p }); await click;
+  assert.deepEqual(calls.slice(1), [['navigate', 'https://example.org/Inicio/#/tarefas'], 'focus']);
+});

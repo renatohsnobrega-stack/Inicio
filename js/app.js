@@ -426,6 +426,7 @@
 
     return pageHead('Tarefas', 'Organizadas pelo prazo: primeiro o que venceu e o de hoje',
       printBtn('tarefas') + btn('+ Tarefa detalhada', 'new-task', '', '')) + `
+      ${pushPanel('tasks')}
       <form class="panel quick-task" data-form="tarefa-rapida">
         <input name="titulo" placeholder="O que precisa ser feito?" autocomplete="off" enterkeyhint="done" aria-label="Nova tarefa">
         <div class="quando">${quando.map(([v, l]) => `<label class="pill"><input type="radio" name="quando" value="${v}" ${state.novaQuando === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
@@ -445,10 +446,13 @@
       ${feitas.length ? `<details class="panel"><summary>Concluídas antes de hoje</summary>${feitas.map(feitaRow).join('')}</details>` : ''}`;
   }
 
-  function pushPanel() {
+  function pushPanel(channel = 'mural') {
     const p = MuralPush.status();
-    return panel('Notificações neste aparelho', `<p class="muted">${esc(p.reason || p.message || (p.active ? 'Ativadas para a conta conectada.' : 'Receba um aviso quando a outra pessoa publicar um novo recado.'))}</p>
-      <p class="muted small">Cada pessoa deve entrar com sua própria conta. O campo “De” é só assinatura, não determina quem recebe o aviso.</p>
+    const description = channel === 'tasks'
+      ? 'Ative para receber avisos às 08h e a cada 2 horas até 20h, enquanto houver tarefas pendentes com vencimento hoje atribuídas à sua conta.'
+      : 'Receba um aviso quando a outra pessoa publicar um novo recado.';
+    return panel('Notificações neste aparelho', `<p class="muted">${esc(p.reason || p.message || (p.active ? 'Ativadas para a conta conectada.' : description))}</p>
+      <p class="muted small">A inscrição é compartilhada neste aparelho e segue a conta conectada. Tarefas só geram aviso para a pessoa responsável; o Mural avisa sobre novos recados.</p>
       <div class="actions">${btn(p.busy ? 'Aguarde…' : (p.active ? 'Revalidar notificações' : 'Ativar notificações'), 'push-enable', p.busy || p.reason ? 'disabled' : '', 'primary')}
       ${btn('Desativar neste aparelho', 'push-disable', p.busy ? 'disabled' : '')}</div>`);
   }
@@ -456,7 +460,7 @@
   function mural() {
     const lista = D.recados();
     return pageHead('Mural da família', 'Recados rápidos entre vocês — aparecem no painel e no celular do outro') + `
-      ${pushPanel()}
+      ${pushPanel('mural')}
       <form class="panel post-form" data-form="recado">
         <textarea name="texto" rows="3" required placeholder="Escreva um recado… ex.: “Comprei o remédio da sua mãe”, “Chego tarde hoje”, “Não esquecer a reunião da escola”"></textarea>
         <div class="post-actions">
