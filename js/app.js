@@ -21,19 +21,44 @@
   };
 
   const NAV = [
-    ['painel', 'Painel', '🏠'], ['mural', 'Mural', '📌'], ['contas', 'Contas', '💰'], ['remedios', 'Remédios', '💊'],
-    ['alimentacao', 'Alimentação', '🍽️'], ['filhos', 'Filhos', '👶'], ['calendario', 'Calendário', '📅'], ['tarefas', 'Tarefas', '✅'],
-    ['listas', 'Listas', '🛒'], ['contatos', 'Contatos', '📞'], ['aniversarios', 'Aniversários', '🎂'], ['imprimir', 'Imprimir', '🖨️'],
-    ['automacao', 'Automação', '🤖'], ['ajustes', 'Ajustes', '⚙️'],
+    ['painel', 'Painel'], ['mural', 'Mural'], ['contas', 'Contas'], ['remedios', 'Remédios'],
+    ['alimentacao', 'Alimentação'], ['filhos', 'Filhos'], ['calendario', 'Calendário'], ['tarefas', 'Tarefas'],
+    ['listas', 'Listas'], ['contatos', 'Contatos'], ['aniversarios', 'Aniversários'], ['imprimir', 'Imprimir'],
+    ['automacao', 'Automação'], ['ajustes', 'Ajustes'],
   ];
+  // Barra de baixo no celular; o resto fica em "Mais".
+  const TABS = ['painel', 'mural', 'tarefas', 'listas'];
+
+  // Ícones de traço (24×24), na cor do texto.
+  const ICONS = {
+    painel: '<path d="M4 11l8-7 8 7v9h-6v-6h-4v6H4z"/>',
+    mural: '<path d="M4 5h16v11H9l-5 4z"/>',
+    contas: '<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M15.5 14.5h2"/>',
+    remedios: '<path d="M10.5 4.5a4.95 4.95 0 0 1 7 7l-6 6a4.95 4.95 0 0 1-7-7z"/><path d="M8 8l6 6"/>',
+    alimentacao: '<path d="M7 3v18M5 3v5a2 2 0 0 0 4 0V3M17 21V3c-2 0-3 2-3 6s1 5 3 5"/>',
+    filhos: '<circle cx="12" cy="8.5" r="4.5"/><path d="M5 20.5c1-3.5 3.8-5 7-5s6 1.5 7 5"/>',
+    calendario: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    tarefas: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+    listas: '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="5" cy="7" r=".8"/><circle cx="5" cy="12" r=".8"/><circle cx="5" cy="17" r=".8"/>',
+    contatos: '<path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z"/>',
+    aniversarios: '<path d="M4 20h16M5 20v-7h14v7M5 16.5c2 1.3 4 1.3 7 0s5-1.3 7 0M12 13V9.5M12 7c-.9-.9-.9-2 0-3.3.9 1.3.9 2.4 0 3.3z"/>',
+    imprimir: '<path d="M7 9V3.5h10V9M7 17H4v-7.5h16V17h-3"/><rect x="7" y="13.5" width="10" height="7"/>',
+    automacao: '<path d="M11 3l1.8 5.2L18 10l-5.2 1.8L11 17l-1.8-5.2L4 10l5.2-1.8zM19 15v5M16.5 17.5h5"/>',
+    ajustes: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+    mais: '<circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/>',
+  };
+  const ico = (k, size = 22) => `<svg class="i" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k] || ''}</svg>`;
+  // Títulos sem o emoji do começo ("📌 Mural" → "Mural"): o visual novo usa ícones de traço.
+  const semEmoji = s => String(s).replace(/^(?:\p{Extended_Pictographic}|️|‍|\s)+/u, '');
 
   // ---------- Componentes ----------
   const pageHead = (title, sub, actions = '') => `<header class="page-head">
-      <div><h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>
+      <div><h1>${semEmoji(title)}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>
       <div class="actions">${actions}</div></header>`;
   const btn = (label, action, attrs = '', cls = '') =>
     `<button type="button" class="btn ${cls}" data-action="${action}" ${attrs}>${label}</button>`;
-  const printBtn = (sheet, extra = '') => btn('🖨️ Imprimir', 'goto-print', `data-sheet="${sheet}" ${extra}`);
+  const printBtn = (sheet, extra = '') => btn(`${ico('imprimir', 18)} Imprimir`, 'goto-print', `data-sheet="${sheet}" ${extra}`);
   const monthNav = (key, month) => `<div class="month-nav">
       ${btn('‹', 'month-shift', `data-key="${key}" data-n="-1" aria-label="Mês anterior"`, 'icon')}
       <strong>${U.monthLabel(month)}</strong>
@@ -41,7 +66,7 @@
     </div>`;
   const emptyMsg = msg => `<p class="empty">${msg}</p>`;
   const panel = (title, body, actions = '') => `<section class="panel">
-      <header class="panel-head"><h2>${title}</h2>${actions}</header>${body}</section>`;
+      <header class="panel-head"><h2>${semEmoji(title)}</h2>${actions}</header>${body}</section>`;
   const stat = (label, value, tone = '') => `<div class="stat ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
   const opts = arr => arr.map(o => (Array.isArray(o) ? o : [o, o]));
   const medIco = m => (D.ehSuplemento(m) ? '🌿' : '💊');
@@ -116,8 +141,6 @@
         ${curtidas.length ? `<small>${esc(curtidas.join(', '))} viu</small>` : ''}</footer>
     </article>`;
   };
-  const noteMini = r => `<div class="note-mini" style="--c:${D.corDe(r.autor)}">${r.fixado ? '📌 ' : ''}<strong>${esc(r.autor || '—')}:</strong>
-      ${esc(r.texto.length > 140 ? r.texto.slice(0, 140) + '…' : r.texto)} <small class="muted">${U.timeAgo(r.em)}</small></div>`;
 
   // "qua 21/10"
   const diaCurto = d => `${U.WDS[U.mondayIndex(U.parseYmd(d))].toLowerCase()} ${U.fmtDay(d)}`;
@@ -173,8 +196,6 @@
     const eu = D.eu();
     const pend = D.pendencias(t, eu);
     const urgentes = pend.filter(p => p.faixa === 'atrasado' || p.faixa === 'hoje');
-    const tarefasPend = urgentes.filter(p => !p.feito).length;
-    const atrasadasTar = urgentes.filter(p => p.faixa === 'atrasado' && !p.feito).length;
     const foco = D.focoDe(eu, t);
     const resto = urgentes.filter(p => !D.emFoco(p.obj, eu));
     const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)));
@@ -185,12 +206,32 @@
     const acabando = D.estoqueAcabando();
     const aniver = D.aniversariosProximos(D.AVISO_ANIVERSARIO, t);
 
-    return pageHead(`Olá${D.eu() ? `, ${esc(D.eu())}` : ''}! Hoje é ${U.longDate(t)}`, D.casaNome(), printBtn('dia', `data-date="${t}"`)) + `
-      <div class="stats">
-        ${stat('A pagar no mês', brl(aPagar))}
-        ${stat('Contas atrasadas', atrasadas.length, atrasadas.length ? 'bad' : 'good')}
-        ${stat('Remédios hoje', `${tomadas}/${doses.length}`, doses.length && tomadas === doses.length ? 'good' : '')}
-        ${stat('Tarefas para hoje', tarefasPend, atrasadasTar ? 'bad' : tarefasPend ? '' : 'good')}
+    const h = new Date().getHours();
+    const saudacao = `${h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'}${D.eu() ? `, ${esc(D.eu())}` : ''}`;
+    const ultimo = recados[0];
+    const proxDose = doses.find(d => !d.tomado);
+    // Anel de progresso dos remédios (circunferência de r=23 ≈ 144,5).
+    const anel = doses.length ? `<svg class="ring" width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
+        <circle cx="28" cy="28" r="23"/><circle class="on" cx="28" cy="28" r="23" stroke-dasharray="${(tomadas / doses.length * 144.5).toFixed(1)} 144.5" transform="rotate(-90 28 28)"/></svg>` : '';
+    const widget = (rota, cor, icone, titulo, corpo) => `<a class="widget" href="#/${rota}" style="--c:${cor}">
+        <span class="w-head">${ico(icone, 16)}${titulo}</span>${corpo}</a>`;
+
+    return `<header class="page-head hero">
+        <div><p class="hello">${saudacao}</p><h1>${U.longDate(t)}</h1></div>
+        <div class="actions">${printBtn('dia', `data-date="${t}"`)}</div></header>
+      <div class="widgets">
+        ${widget('mural', 'var(--navy)', 'mural', 'Mural', ultimo
+          ? `<p class="w-quote">“${esc(ultimo.texto)}”</p><small>${esc(ultimo.autor || '—')} · ${U.timeAgo(ultimo.em)}</small>`
+          : '<p class="w-quote">Nenhum recado ainda.</p><small>Deixe um para quem chega em casa</small>')}
+        ${widget('remedios', 'var(--sage)', 'remedios', 'Remédios', doses.length
+          ? `<span class="w-ring">${anel}<span><strong class="w-num">${tomadas} de ${doses.length}</strong>
+              <small>${proxDose ? `próximo às ${proxDose.hora}` : 'tudo tomado hoje'}</small></span></span>`
+          : '<strong class="w-num">—</strong><small>nenhum remédio hoje</small>')}
+        ${widget('contas', 'var(--sienna)', 'contas', 'Contas', `<strong class="w-num">${brl(aPagar)}</strong>
+          <small class="${atrasadas.length ? 'w-bad' : ''}">${atrasadas.length
+            ? `${atrasadas.length} ${atrasadas.length === 1 ? 'atrasada' : 'atrasadas'}` : `a pagar em ${U.MONTHS[new Date().getMonth()].toLowerCase()}`}</small>`)}
+        ${widget('listas', 'var(--navy)', 'listas', compras ? esc(semEmoji(compras.nome)) : 'Compras', `<strong class="w-num">${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</strong>
+          <small>${itens.length ? esc(itens.slice(0, 3).map(i => i.texto).join(', ')) + (itens.length > 3 ? '…' : '') : 'lista em dia'}</small>`)}
       </div>
       ${revisar.length ? panel(`🤖 Adicionados automaticamente — para revisar (${revisar.length})`, revisar.map(({ kind, obj }) => `
         <div class="row review">
@@ -211,8 +252,6 @@
             + (resto.length > 8 ? `<p class="muted small">+ ${resto.length - 8} itens</p>` : '') : '')
           + (!foco.length && !resto.length ? emptyMsg('Nada para hoje. 🎉') : !foco.length ? '<p class="muted small">Toque na ☆ para escolher até 3 coisas como foco do dia.</p>' : ''),
           `<a href="#/tarefas" class="more">ver todas</a>`)}
-        ${panel('📌 Mural', recados.length ? recados.map(noteMini).join('') : emptyMsg('Nenhum recado. Deixe um para quem chega em casa!'),
-          `<a href="#/mural" class="more">escrever</a>`)}
         ${panel(compras ? `${esc(compras.icone || '🛒')} ${esc(compras.nome)} (${itens.length})` : '🛒 Listas',
           itens.length ? itens.slice(0, 8).map(itemRow).join('') + (itens.length > 8 ? `<p class="muted small">+ ${itens.length - 8} itens</p>` : '')
             : emptyMsg(compras ? 'Lista vazia.' : 'Crie sua lista de compras compartilhada.'),
@@ -281,7 +320,7 @@
         <p class="muted small">${m.inicio ? `De ${U.fmtDate(m.inicio)} ` : ''}${m.fim ? `até ${U.fmtDate(m.fim)}` : 'Uso contínuo'}${ativo ? '' : ' · inativo'}</p>
       </article>`;
     };
-    const grupo = (titulo, lista, vazio) => `<h2 class="group-title">${titulo}</h2>
+    const grupo = (titulo, lista, vazio) => `<h2 class="group-title">${semEmoji(titulo)}</h2>
       ${lista.length ? `<div class="cards">${lista.map(card).join('')}</div>` : emptyMsg(vazio)}`;
     const ativos = v => Store.list('remedio').filter(m => (!v || (m.pessoa || '') === v) && D.medActiveOn(m, t)).length;
     const novo = cat => `data-categoria="${cat}" data-pessoa="${esc(sel)}"`;
@@ -515,7 +554,7 @@
   const num = (v, casas = 1) => String(Math.round(Number(v) * 10 ** casas) / 10 ** casas).replace('.', ',');
 
   // Gráfico de crescimento (SVG): linhas de escore-z −3, −2, 0, +2 e +3 da OMS, como na Caderneta, e as medidas.
-  const LINHAS_Z = [[-3, '#c0392b'], [-2, '#d68910'], [0, '#2f6f5e'], [2, '#d68910'], [3, '#c0392b']];
+  const LINHAS_Z = [[-3, '#c0392b'], [-2, '#d68910'], [0, '#23392F'], [2, '#d68910'], [3, '#c0392b']];
   function graficoCrescimento(c, ind, medidas) {
     const pts = medidas.map(m => ({ m, id: D.idadeDias(c, m.data), v: Number(m[ind]) }))
       .filter(x => x.id && !x.id.antesDoTermo && x.v > 0 && x.id.dias <= Crescimento.DIAS_MAX);
@@ -911,7 +950,9 @@ ${kinds}${filhos}`;
     }
     pending = false;
     const r = currentRoute();
-    document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === r));
+    document.querySelectorAll('#nav a, #mais-links a').forEach(a => a.classList.toggle('active', a.dataset.route === r));
+    document.querySelectorAll('#tabbar [data-route]').forEach(a =>
+      a.classList.toggle('active', a.dataset.route === r || (a.dataset.route === 'mais' && !TABS.includes(r))));
     main.innerHTML = VIEWS[r]();
     if (r === 'imprimir') fitPreview();
   }
@@ -1672,11 +1713,17 @@ ${kinds}${filhos}`;
       $main().innerHTML = '<p class="loading">Carregando…</p>';
       await Store.loadCloud();
     }
-    document.getElementById('nav').innerHTML = NAV.map(([r, label, icon]) =>
-      `<a href="#/${r}" data-route="${r}"><span class="ico">${icon}</span><span>${label}</span></a>`).join('');
+    const link = ([r, label]) => `<a href="#/${r}" data-route="${r}">${ico(r)}<span>${label}</span></a>`;
+    document.getElementById('nav').innerHTML = NAV.map(link).join('');
+    document.getElementById('tabbar').innerHTML = NAV.filter(([r]) => TABS.includes(r)).map(link).join('')
+      + `<button type="button" data-route="mais" aria-haspopup="dialog">${ico('mais')}<span>Mais</span></button>`;
+    document.getElementById('mais-links').innerHTML = NAV.filter(([r]) => !TABS.includes(r)).map(link).join('');
+    const mais = document.getElementById('mais');
+    document.querySelector('#tabbar [data-route="mais"]').onclick = () => mais.showModal();
+    mais.addEventListener('click', e => { if (e.target === mais || e.target.closest('a, [data-close]')) mais.close(); });
     document.getElementById('mode').innerHTML = Store.mode() === 'cloud'
-      ? `☁️ Sincronizado<br><small>${esc(Store.user()?.email || '')}</small>`
-      : '💻 Modo local<br><small>dados só neste navegador</small>';
+      ? `Sincronizado<br><small>${esc(Store.user()?.email || '')}</small>`
+      : 'Modo local<br><small>dados só neste navegador</small>';
     Store.subscribe(() => { render(); agendarEstoque(); });
     Store.setErrorHandler(err => toast('⚠️ Erro ao salvar: ' + (err.message || err)));
     bindEvents();

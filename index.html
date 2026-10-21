@@ -5,24 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Elinor</title>
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#2f6f5e">
+  <meta name="theme-color" content="#23392F">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Elinor">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&display=swap">
   <link rel="stylesheet" href="css/app.css">
   <style id="page-style">@page { size: A4 portrait; margin: 10mm; }</style>
 </head>
 <body>
   <div id="shell" class="shell">
     <aside class="sidebar">
-      <a class="brand" href="#/painel"><img src="icon.svg" alt="" width="32" height="32"><span id="brand-name">Elinor</span></a>
-      <nav id="nav" class="nav"></nav>
+      <a class="brand" href="#/painel"><img src="icon.svg" alt="" width="34" height="34"><span id="brand-name">Elinor</span></a>
+      <nav id="nav" class="nav" aria-label="Menu"></nav>
       <div id="mode" class="mode"></div>
     </aside>
     <main id="main" class="main"><p class="loading">Carregando…</p></main>
+    <nav id="tabbar" class="tabbar" aria-label="Menu principal"></nav>
   </div>
+  <dialog id="mais" class="mais" aria-label="Mais telas">
+    <div class="mais-head"><h2>Mais</h2><button type="button" class="btn ghost" data-close aria-label="Fechar">✕</button></div>
+    <nav id="mais-links" class="mais-links"></nav>
+  </dialog>
   <dialog id="modal" class="modal"></dialog>
   <div id="print-area"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

@@ -5,7 +5,7 @@ self.addEventListener('push', event => {
   // Não confiar em URLs/textos do payload: nada privado na tela bloqueada.
   event.waitUntil(self.registration.showNotification('Elinor', {
     body: 'Há um novo recado no Mural. Abra o app para ler.',
-    icon: new URL('icon.svg', self.registration.scope).href,
+    icon: new URL('icon-192.png', self.registration.scope).href,
     tag: 'casa-mural',
     data: { url: new URL('./#/mural', self.registration.scope).href },
   }));
