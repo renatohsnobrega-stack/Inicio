@@ -1,5 +1,5 @@
 /**
- * Casa Organizada — sincroniza o Google Agenda com o app, sem IA (zero tokens).
+ * Elinor (app da casa) — sincroniza o Google Agenda com o app, sem IA (zero tokens).
  *
  * Como usar (uma vez só, uns 5 minutos):
  *  1. Acesse https://script.google.com → "Novo projeto" e cole este arquivo inteiro.

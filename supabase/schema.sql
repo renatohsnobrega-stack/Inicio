@@ -1,4 +1,4 @@
--- Casa Organizada — banco de dados no Supabase.
+-- Elinor (antigo Casa Organizada) — banco de dados no Supabase.
 -- Cole tudo no "SQL Editor" do seu projeto Supabase e clique em "Run".
 -- ANTES, troque os dois e-mails abaixo pelos de vocês.
 

@@ -1,5 +1,5 @@
 /**
- * Casa Organizada — sincroniza o Google Tarefas com o app, nos dois sentidos, sem IA.
+ * Elinor (app da casa) — sincroniza o Google Tarefas com o app, nos dois sentidos, sem IA.
  *
  * Listas do Google Tarefas espelhadas no app:
  *  - "Casa" e "Minhas tarefas" ⇄ Tarefas avulsas do app (as de "Uma vez"; rotinas que se repetem

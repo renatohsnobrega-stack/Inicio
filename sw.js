@@ -3,7 +3,7 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 self.addEventListener('push', event => {
   // Não confiar em URLs/textos do payload: nada privado na tela bloqueada.
-  event.waitUntil(self.registration.showNotification('Casa Organizada', {
+  event.waitUntil(self.registration.showNotification('Elinor', {
     body: 'Há um novo recado no Mural. Abra o app para ler.',
     icon: new URL('icon.svg', self.registration.scope).href,
     tag: 'casa-mural',

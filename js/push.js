@@ -11,7 +11,7 @@ const MuralPush = (() => {
   const ios = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   function unavailable() {
     if (Store.mode() !== 'cloud' || !Store.user()) return 'Notificações exigem login no modo nuvem.';
-    if (ios() && !standalone()) return 'No iPhone, adicione à Tela de Início e abra pelo ícone Casa antes de ativar (iOS 16.4 ou posterior).';
+    if (ios() && !standalone()) return 'No iPhone, adicione à Tela de Início e abra pelo ícone Elinor antes de ativar (iOS 16.4 ou posterior).';
     if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'Este navegador não oferece Web Push. Use um navegador compatível em HTTPS.';
     if (!Store.config().muralPushPublicKey) return 'Notificações aguardando configuração do servidor.';
     if (Notification.permission === 'denied') return 'Permissão bloqueada. Libere Casa em Ajustes → Notificações no aparelho e tente novamente.';

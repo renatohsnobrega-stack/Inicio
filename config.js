@@ -1,4 +1,4 @@
-// Configuração do Casa Organizada.
+// Configuração do Elinor.
 //
 // Deixe em branco para usar o MODO LOCAL (dados só neste navegador — bom para testar).
 // Preencha com os dados do seu projeto Supabase para o MODO NUVEM (login + sincronização

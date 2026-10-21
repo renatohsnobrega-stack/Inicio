@@ -761,7 +761,7 @@ Dados dos filhos (esta chave tem acesso). Filhos da casa: ${D.filhos().map(n => 
 ${Caderneta.FAIXAS.map(f => `  ${f.ini}-${f.fim}: ${f.marcos.map(m => `${m.id} (${m.nome})`).join('; ')}`).join('\n')}
 - medida e historia: sempre com "crianca"; aparecem no Painel para revisão.
 ${Object.entries(Schema.KINDS_FILHOS).map(linha).join('\n')}`;
-    return `API do app "Casa Organizada" (organização da casa).
+    return `API do app "Elinor" (organização da casa).
 
 Cabeçalhos em todas as chamadas:
   apikey: ${cfg.supabaseAnonKey || 'CHAVE_ANON_DO_SUPABASE'}
@@ -912,7 +912,6 @@ ${kinds}${filhos}`;
     pending = false;
     const r = currentRoute();
     document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === r));
-    document.getElementById('brand-name').textContent = D.casaNome();
     main.innerHTML = VIEWS[r]();
     if (r === 'imprimir') fitPreview();
   }
@@ -1519,7 +1518,7 @@ ${kinds}${filhos}`;
       const blob = new Blob([JSON.stringify(Store.exportAll(), null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `casa-organizada-backup-${U.today()}.json`;
+      a.download = `elinor-backup-${U.today()}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
     },
@@ -1647,7 +1646,7 @@ ${kinds}${filhos}`;
   function showLogin() {
     document.body.classList.add('logged-out');
     $main().innerHTML = `<form class="login panel" id="login">
-      <img src="icon.svg" alt="" width="56" height="56"><h1>Casa Organizada</h1>
+      <img src="icon.svg" alt="" width="56" height="56"><h1>Elinor</h1>
       <p class="muted">Acesso restrito. Entre com seu e-mail e senha.</p>
       <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
       <label>Senha<input type="password" name="password" required autocomplete="current-password"></label>

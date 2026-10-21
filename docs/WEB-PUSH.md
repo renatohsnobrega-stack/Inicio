@@ -13,11 +13,11 @@ A identidade vem da sessão Supabase (`auth.uid()`), não do campo selecionável
 ## Ativar em cada iPhone — depois da implantação aprovada
 
 1. Use **iOS 16.4 ou posterior**. No Safari, abra <https://renatohsnobrega-stack.github.io/Inicio/>.
-2. Toque **Compartilhar → Adicionar à Tela de Início**. Abra o app pelo ícone **Casa**, não pela aba do Safari.
+2. Toque **Compartilhar → Adicionar à Tela de Início**. Abra o app pelo ícone **Elinor**, não pela aba do Safari.
 3. Entre com **sua própria conta**: Renato no aparelho de Renato, Vanessa no de Vanessa.
 4. Abra **Mural → Ativar notificações → Permitir**. Repita no outro iPhone.
 
-Se já está instalado, abra pelo ícone e siga a partir do passo 3. Se a permissão foi negada, libere Casa em **Ajustes → Notificações** no iPhone e tente novamente. Modo Foco, conexão e ajustes do sistema podem atrasar ou silenciar avisos. Não exige inscrição no Apple Developer Program. [Requisitos oficiais do WebKit](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/).
+Se já está instalado, abra pelo ícone e siga a partir do passo 3. Se a permissão foi negada, libere Elinor em **Ajustes → Notificações** no iPhone e tente novamente. Modo Foco, conexão e ajustes do sistema podem atrasar ou silenciar avisos. Não exige inscrição no Apple Developer Program. [Requisitos oficiais do WebKit](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/).
 
 **Sair** remove a inscrição deste aparelho antes de encerrar a sessão. Se essa remoção falhar, o app pede nova tentativa em vez de fingir que saiu. Desativar em um aparelho não desativa os demais. Se reinstalar o app ou o sistema perder a inscrição, toque novamente em Ativar; não há reinscrição automática sem consentimento. Inscrições expiradas são removidas quando o provedor responde 404/410.
 

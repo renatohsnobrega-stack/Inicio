@@ -1,4 +1,6 @@
-# 🏠 Casa Organizada
+# Elinor
+
+> O nome é uma homenagem a Elinor Dashwood, de *Razão e Sensibilidade* (Jane Austen): a irmã do bom senso, que mantém a casa em ordem. Antes o app se chamava "Casa Organizada".
 
 Um sistema leve e privado para organizar a rotina da casa a dois:
 
