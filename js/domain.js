@@ -29,9 +29,27 @@ const D = (() => {
   const responsaveis = () => [...adultos(), 'Ambos'];
   const casaNome = () => config('casa').nome || 'Nossa Casa';
 
-  // Quem está usando este aparelho (fica só neste navegador).
-  const eu = () => { try { return localStorage.getItem('casa:eu') || ''; } catch { return ''; } };
-  const setEu = nome => { try { localStorage.setItem('casa:eu', nome); } catch { /* sem armazenamento */ } };
+  // Na nuvem, a conta define a pessoa. Nunca herdar a escolha global de outro login.
+  const euKey = () => {
+    const user = typeof Store.user === 'function' ? Store.user() : null;
+    return user?.id ? `casa:eu:${user.id}` : 'casa:eu';
+  };
+  const eu = () => {
+    const user = typeof Store.user === 'function' ? Store.user() : null;
+    const perfil = typeof Store.profileName === 'function' ? Store.profileName() : '';
+    if (perfil && pessoas().includes(perfil)) return perfil;
+    // Compatibilidade com contas que já têm um nome exato nos metadados.
+    if (user) {
+      const meta = user.user_metadata || {};
+      const nome = [meta.pessoa, meta.full_name, meta.name].find(n => pessoas().includes(n));
+      if (nome) return nome;
+    }
+    try {
+      const nome = localStorage.getItem(euKey()) || '';
+      return pessoas().includes(nome) ? nome : '';
+    } catch { return ''; }
+  };
+  const setEu = nome => { try { localStorage.setItem(euKey(), nome); } catch { /* sem armazenamento */ } };
   const corDe = nome => { const i = pessoas().indexOf(nome); return CORES[(i < 0 ? pessoas().length : i) % CORES.length]; };
 
   // ---------- Mural ----------
@@ -400,7 +418,7 @@ const D = (() => {
   // e vale só para aquele dia; amanhã a lista começa vazia.
   const FOCO_MAX = 3;
   const emFoco = (o, pessoa, hoje = U.today()) => (o.foco || {})[pessoa || 'casa'] === hoje;
-  const focoDe = (pessoa, hoje = U.today()) => pendencias(hoje).filter(p => emFoco(p.obj, pessoa, hoje));
+  const focoDe = (pessoa, hoje = U.today()) => pendencias(hoje, pessoa).filter(p => emFoco(p.obj, pessoa, hoje));
 
   function freqLabel(t) {
     switch (t.tipo) {

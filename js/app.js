@@ -1,6 +1,10 @@
 // Telas, navegação e formulários.
 (() => {
   const { esc, nl2br, brl } = U;
+  // D.ehDe compartilha registros de Ambos e os que não têm responsável; o fallback
+  // mantém compatibilidade enquanto versões antigas do domínio ainda não o exportam.
+  const ehDe = (quem, pessoa) => typeof D.ehDe === 'function'
+    ? D.ehDe(quem, pessoa) : (!pessoa || !quem || quem === pessoa || quem === 'Ambos');
   const $main = () => document.getElementById('main');
 
   const state = {
@@ -10,7 +14,7 @@
     importacao: null, // pré-visualização da importação: [{ kind, data, erros }]
     novaChave: null,  // chave de API recém-criada (mostrada uma vez)
     chaves: null,
-    remPessoa: '',    // aba de Remédios ('' = todos)
+    remPessoa: null,  // aba de Remédios ('' = todos; null = escolher pelo dono da conta/aparelho)
     tarPessoa: null,  // aba de Tarefas ('' = todos; null = escolher pelo dono do aparelho)
     novaQuando: 'hoje', // prazo escolhido por último no "adicionar rápido" de tarefas
     faixasAbertas: { atrasado: true, hoje: true, semana: true, depois: false, sem: false },
@@ -187,23 +191,24 @@
   function painel() {
     const t = U.today();
     const wd = U.mondayIndex(new Date());
-    const doses = D.dosesOn(t);
-    const tomadas = doses.filter(d => d.tomado).length;
-    const atencao = D.contasAtencao(10);
-    const atrasadas = atencao.filter(o => D.billStatus(o) === 'atrasada');
-    const mes = D.billOccurrences(U.thisMonth());
-    const aPagar = mes.filter(o => !o.pago).reduce((s, o) => s + o.valor, 0);
     const eu = D.eu();
+    const doses = D.dosesOn(t).filter(d => ehDe(d.med?.pessoa, eu));
+    const tomadas = doses.filter(d => d.tomado).length;
+    const atencao = D.contasAtencao(10).filter(o => ehDe(o.conta.responsavel, eu));
+    const atrasadas = atencao.filter(o => D.billStatus(o) === 'atrasada');
+    const mes = D.billOccurrences(U.thisMonth()).filter(o => ehDe(o.conta.responsavel, eu));
+    const aPagar = mes.filter(o => !o.pago).reduce((s, o) => s + o.valor, 0);
     const pend = D.pendencias(t, eu);
     const urgentes = pend.filter(p => p.faixa === 'atrasado' || p.faixa === 'hoje');
     const foco = D.focoDe(eu, t);
     const resto = urgentes.filter(p => !D.emFoco(p.obj, eu));
-    const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)));
+    const eventos = D.eventsBetween(t, U.ymd(U.addDays(new Date(), 14)))
+      .filter(({ ev }) => ehDe(ev.pessoa, eu));
     const recados = D.recados().slice(0, 4);
     const revisar = D.paraRevisar();
     const compras = D.listas()[0];
     const itens = compras ? D.itensDa(compras.id).filter(i => !i.feito) : [];
-    const acabando = D.estoqueAcabando();
+    const acabando = D.estoqueAcabando().filter(x => ehDe(x.med?.pessoa, eu));
     const aniver = D.aniversariosProximos(D.AVISO_ANIVERSARIO, t);
 
     const h = new Date().getHours();
@@ -261,7 +266,9 @@
         ${panel('💰 Contas atrasadas e próximas', atencao.length ? atencao.map(o => billRow(o)).join('') : emptyMsg('Nada vencendo nos próximos 10 dias. 🎉'),
           `<a href="#/contas" class="more">ver mês</a>`)}
         ${panel('🍽️ Cardápio de hoje', `<dl class="meals-today">${D.SLOTS.map(s =>
-          `<dt>${s.nome}</dt><dd>${Print.mealLines(wd, s.id) || '<span class="muted">—</span>'}</dd>`).join('')}</dl>`,
+          `<dt>${s.nome}</dt><dd>${eu
+            ? (D.meal(wd, s.id, eu) ? nl2br(D.meal(wd, s.id, eu)) : '<span class="muted">—</span>')
+            : (Print.mealLines(wd, s.id) || '<span class="muted">—</span>')}</dd>`).join('')}</dl>`,
           `<a href="#/alimentacao" class="more">editar</a>`)}
         ${panel('📅 Próximos 14 dias', eventos.length ? eventos.map(eventLine).join('') : emptyMsg('Nenhum compromisso.'),
           btn('+ Evento', 'new-event', `data-date="${t}"`, 'small'))}
@@ -303,7 +310,9 @@
 
   function remedios() {
     const t = U.today();
-    const sel = D.pessoas().includes(state.remPessoa) ? state.remPessoa : '';
+    const ps = D.pessoas();
+    if (state.remPessoa == null) state.remPessoa = ps.includes(D.eu()) ? D.eu() : '';
+    const sel = ps.includes(state.remPessoa) ? state.remPessoa : '';
     const daPessoa = m => !sel || (m.pessoa || '') === sel;
     const doses = D.dosesOn(t).filter(d => daPessoa(d.med));
     const meds = Store.list('remedio').filter(daPessoa)
@@ -910,6 +919,7 @@ ${kinds}${filhos}`;
   function ajustes() {
     const nomes = D.pessoas();
     const cloud = Store.mode() === 'cloud';
+    const perfil = cloud && typeof Store.profileName === 'function' ? Store.profileName() : '';
     return pageHead('Ajustes', '') + `
       <div class="grid-2">
         ${panel('Casa e pessoas', `<form class="form-inline" data-form="pessoas">
@@ -920,10 +930,10 @@ ${kinds}${filhos}`;
           <label>Quem é filho (separados por vírgula) — aparece em Remédios, Alimentação e Calendário, mas não em Tarefas
             <input name="filhos" value="${esc(D.filhos().join(', '))}" placeholder="Ex.: Antônio"></label>
           <button class="btn primary" type="submit">Salvar</button></form>`)}
-        ${panel('Este aparelho', `<p class="muted">Diga de quem é este celular/computador. Usado para assinar recados e mostrar quem adicionou itens nas listas.</p>
-          <label class="form-inline">Este aparelho é de
+        ${panel('Seu perfil', `<p class="muted">A identificação da conta/login define quem está usando o app; ela ajuda a mostrar seus dados pessoais. No modo local, escolha quem usa este aparelho.</p>
+          ${perfil ? `<p>Identificado pela conta como <strong>${esc(perfil)}</strong>.</p>` : `<label class="form-inline">Este aparelho/conta é de
             <select data-action="set-eu"><option value="">— escolher —</option>${D.pessoas().map(p =>
-              `<option ${p === D.eu() ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>`)}
+              `<option ${p === D.eu() ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>`}`)}
         ${panel('Onde ficam os dados', cloud
           ? `<p>☁️ <b>Modo nuvem</b> — dados sincronizados entre vocês dois.</p><p class="muted">Conectado como ${esc(Store.user()?.email || '')}</p>
              ${btn('Sair', 'sign-out')}`
@@ -1153,7 +1163,7 @@ ${kinds}${filhos}`;
       fields: [
         { name: 'nome', label: sup ? 'Suplemento' : 'Remédio', required: true },
         { name: 'categoria', label: 'Tipo', type: 'select', options: [['remedio', 'Remédio'], ['suplemento', 'Suplemento (aparece também em Alimentação)']], default: 'remedio' },
-        { name: 'pessoa', label: 'Para quem', type: 'combo', options: D.pessoas(), default: D.pessoas()[0] },
+        { name: 'pessoa', label: 'Para quem', type: 'combo', options: D.pessoas(), default: D.eu() },
         { name: 'dose', label: 'Dose', hint: 'Ex.: 1 comprimido de 50mg, 10 gotas' },
         { name: 'horarios', label: 'Horários', type: 'times', hint: 'Separe por vírgula. Ex.: 08:00, 14:00, 20:00' },
         { name: 'dias', label: 'Dias da semana', type: 'weekdays', hint: 'Nenhum selecionado = todos os dias. Ex.: Seg, Qua e Sex.' },
@@ -1497,7 +1507,12 @@ ${kinds}${filhos}`;
       }
       toast('Números de emergência adicionados ✔');
     },
-    'set-eu': el => { D.setEu(el.value); toast('Salvo ✔'); },
+    'set-eu': el => {
+      D.setEu(el.value);
+      state.remPessoa = state.tarPessoa = state.aliPessoa = null;
+      render(true);
+      toast('Salvo ✔');
+    },
 
     copy: el => copiar(el.dataset.text),
     'copy-prompt': () => copiar(Schema.promptIA(D.pessoas()), 'Prompt copiado — cole no Claude ou Gemini ✔'),
@@ -1716,6 +1731,7 @@ ${kinds}${filhos}`;
     if (Store.mode() === 'cloud') {
       $main().innerHTML = '<p class="loading">Carregando…</p>';
       await Store.loadCloud();
+      state.remPessoa = state.tarPessoa = state.aliPessoa = null;
     }
     const link = ([r, label]) => `<a href="#/${r}" data-route="${r}">${ico(r)}<span>${label}</span></a>`;
     document.getElementById('nav').innerHTML = NAV.map(link).join('');

@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Testes do supabase/schema.sql num Postgres embutido (PGlite). Rodar: npm install && npm test",
   "scripts": {
-    "test": "node escopo.test.mjs ../../supabase/schema.sql && node push.test.mjs ../../supabase/schema.sql && node task-push.test.mjs ../../supabase/schema.sql"
+    "test": "node escopo.test.mjs ../../supabase/schema.sql && node push.test.mjs ../../supabase/schema.sql && node task-push.test.mjs ../../supabase/schema.sql && node perfil.test.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.8"
