@@ -154,6 +154,10 @@ svg.i { flex: none; vertical-align: middle; }
 .row.link { cursor: pointer; }
 .row.link:hover { background: var(--bg); }
 .row small, .check-row small { display: block; color: var(--muted); font-size: 12.5px; }
+.focus-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.focus-controls .btn { min-height: 44px; }
+.row .focus-status { color: var(--brand); font-weight: 600; }
+.row .focus-note { margin-top: 6px; overflow-wrap: anywhere; }
 .grow { flex: 1; min-width: 0; }
 .date, .time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--muted); min-width: 44px; }
 .money { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }

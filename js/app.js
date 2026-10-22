@@ -164,16 +164,22 @@
       ${btn('✕', 'del-item', `data-id="${esc(i.id)}" aria-label="Remover"`, 'small ghost')}</label>`;
 
   // Uma pendência (tarefa ou item de lista com prazo), com ☆ para pôr no foco do dia.
-  const pendRow = (p, chave) => {
+  const pendRow = (p, chave, noFoco = false) => {
     const t = U.today();
     const foco = D.emFoco(p.obj, chave);
+    const execucao = noFoco && chave === D.eu() && !p.feito ? Foco.status(p.kind, p.obj.id) : null;
     const meta = [p.kind === 'item' ? `${p.lista?.icone || '📝'} ${p.lista?.nome || 'Lista'}` : '', p.quem, p.obj.local,
       p.recorrente ? D.freqLabel(p.obj) : p.data && p.faixa !== 'hoje' ? diaCurto(p.data) : ''].filter(Boolean).join(' · ');
     const ref = `data-kind="${p.kind}" data-id="${esc(p.obj.id)}"`;
     return `<div class="row pend ${p.feito ? 'done' : ''}">
       <input type="checkbox" data-action="${p.kind === 'tarefa' ? 'toggle-task' : 'toggle-item'}" data-id="${esc(p.obj.id)}" data-date="${t}"
         ${p.feito ? 'checked' : ''} aria-label="Concluir">
-      <span class="grow"><strong>${esc(p.titulo)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}</span>
+      <span class="grow"><strong>${esc(p.titulo)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}
+        ${execucao ? `<span class="focus-controls">
+          ${execucao.estado === 'pronta' ? '' : `<small class="focus-status">${execucao.estado === 'andamento' ? 'Em andamento' : 'Pausada'}</small>`}
+          ${btn(execucao.estado === 'andamento' ? 'Pausar' : execucao.estado === 'pausada' ? 'Retomar' : 'Começar',
+            execucao.estado === 'andamento' ? 'pause-focus' : 'start-focus', ref, 'small')}
+        </span>${execucao.nota ? `<small class="focus-note">Próximo passo: ${nl2br(execucao.nota)}</small>` : ''}` : ''}</span>
       ${p.feito ? '' : btn(foco ? '★' : '☆', 'toggle-foco', `${ref} data-chave="${esc(chave)}" title="${foco ? 'Tirar do foco' : 'Pôr no foco do dia'}"`, `small ghost foco ${foco ? 'on' : ''}`)}
       ${btn('✎', p.kind === 'tarefa' ? 'edit-task' : 'edit-item', `data-id="${esc(p.obj.id)}" aria-label="Editar"`, 'small ghost')}
     </div>`;
@@ -252,7 +258,7 @@
         `<a href="#/aniversarios" class="more">ver todos</a>`) : ''}
       <div class="grid-2">
         ${panel(`🎯 Foco e tarefas de hoje${eu ? ` — ${esc(eu)}` : ''}`, progresso(pend)
-          + (foco.length ? `<h3 class="sub">Foco do dia</h3>${foco.map(p => pendRow(p, eu)).join('')}` : '')
+          + (foco.length ? `<h3 class="sub">Foco do dia</h3>${foco.map(p => pendRow(p, eu, true)).join('')}` : '')
           + (resto.length ? `${foco.length ? '<h3 class="sub">Também para hoje</h3>' : ''}${resto.slice(0, 8).map(p => pendRow(p, eu)).join('')}`
             + (resto.length > 8 ? `<p class="muted small">+ ${resto.length - 8} itens</p>` : '') : '')
           + (!foco.length && !resto.length ? emptyMsg('Nada para hoje. 🎉') : !foco.length ? '<p class="muted small">Toque na ☆ para escolher até 3 coisas como foco do dia.</p>' : ''),
@@ -444,7 +450,7 @@
       </form>
       ${pessoaTabs('pick-tar-pessoa', sel, 'Todos', abertos, ps)}
       ${panel(`🎯 Foco do dia${chave ? ` — ${esc(chave)}` : ''}`, progresso(pend) + (foco.length
-        ? foco.map(p => pendRow(p, chave)).join('')
+        ? foco.map(p => pendRow(p, chave, true)).join('')
         : `<p class="muted">Escolha até ${D.FOCO_MAX} coisas para hoje tocando na ☆. O resto pode esperar.</p>`))}
       <div class="board">${D.FAIXAS.map(coluna).join('')}</div>
       ${panel(`🔁 Rotina (${rotina.length})`, rotina.length ? `<div class="table-wrap"><table class="table">
@@ -1399,17 +1405,45 @@ ${kinds}${filhos}`;
 
     'new-task': () => taskForm(),
     'edit-task': el => taskForm(Store.get('tarefa', el.dataset.id)),
+    'start-focus': async el => {
+      const { kind, id } = el.dataset;
+      const atual = Foco.status(kind, id);
+      if (!atual) return toast('Escolha uma pendência no seu Foco do dia.');
+      try { await Foco.mudar(kind, id, atual.estado === 'pausada' ? 'retomar' : 'comecar'); }
+      catch (e) { toast(e.message); }
+    },
+    'pause-focus': el => {
+      const { kind, id } = el.dataset;
+      const atual = Foco.status(kind, id);
+      if (atual?.estado !== 'andamento') return toast('O foco mudou. Confira o estado atual.');
+      // Não aplicar a nota se houve troca de conta ou de dia enquanto o formulário estava aberto.
+      const conta = Store.user()?.id || D.eu();
+      const dia = U.today();
+      openForm({
+        title: 'Pausar tarefa', saveLabel: 'Pausar',
+        values: { nota: atual.nota },
+        fields: [{ name: 'nota', label: 'Próximo passo (opcional)', type: 'textarea',
+          hint: 'Uma frase para facilitar a retomada. Até 500 caracteres.' }],
+        check: v => v.nota.length > 500 ? 'Use até 500 caracteres para o próximo passo.' : '',
+        onSave: async v => {
+          if (conta !== (Store.user()?.id || D.eu()) || dia !== U.today()) return toast('A conta ou o dia mudou. Abra o foco novamente.');
+          try { await Foco.mudar(kind, id, 'pausar', v.nota); }
+          catch (e) { toast(e.message); }
+        },
+      });
+    },
     'toggle-task': async el => {
       const t = Store.get('tarefa', el.dataset.id);
       const date = el.dataset.date;
       const feito = !D.taskDone(t, date);
+      const focoRevisao = U.uid();
       if (D.isRecorrente(t)) {
         const limite = U.ymd(U.addDays(new Date(), -120));
         const feitos = Object.fromEntries(Object.entries(t.feitos || {}).filter(([d]) => d >= limite));
         if (feitos[date]) delete feitos[date]; else feitos[date] = true;
-        await Store.put('tarefa', { ...t, feitos });
+        await Store.put('tarefa', { ...t, feitos, focoRevisao });
       } else {
-        await Store.put('tarefa', { ...t, feito, feitoEm: feito ? date : null });
+        await Store.put('tarefa', { ...t, feito, feitoEm: feito ? date : null, focoRevisao });
       }
       if (feito) comemorar();
     },
@@ -1468,7 +1502,7 @@ ${kinds}${filhos}`;
     'pick-list': el => { state.lista = el.dataset.id; render(true); },
     'toggle-item': async el => {
       const i = Store.get('item', el.dataset.id);
-      await Store.put('item', { ...i, feito: !i.feito, feitoEm: i.feito ? null : U.today() });
+      await Store.put('item', { ...i, feito: !i.feito, feitoEm: i.feito ? null : U.today(), focoRevisao: U.uid() });
       if (!i.feito && i.prazo) comemorar();
     },
     'edit-item': (el, e) => { e.preventDefault(); itemForm(Store.get('item', el.dataset.id)); },

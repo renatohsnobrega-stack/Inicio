@@ -127,6 +127,9 @@ testes/               testes automáticos das regras e integrações (node teste
 ```
 
 ## Ideias para as próximas versões
+
+O MVP do Foco permite **Começar · Pausar · Retomar** uma pendência, com próximo passo opcional, sem cronômetro ou novas notificações. Veja [o funcionamento, os testes e os próximos itens 7 (carro) e 8 (impostos e taxas)](docs/FOCO-E-PROXIMOS-ITENS.md). Os itens 7 e 8 estão apenas registrados, não implementados.
+
 - Lembretes por notificação no celular (horário do remédio, conta vencendo amanhã)
 - Ingredientes do cardápio enviados direto para a lista de compras
 - Receitas da família ligadas ao cardápio
