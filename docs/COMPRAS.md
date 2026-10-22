@@ -1,58 +1,66 @@
-# Compras: reutilizar produtos e guardar histórico
+# Compras, histórico e leitura local da nota
 
-## No celular
+## O caminho mais rápido
 
-1. Em **Listas**, use **Escolher produtos**. O catálogo reúne os itens que já estão nessa lista (inclusive os pendentes) e os produtos das compras finalizadas. Selecione sem reescrever. Para criar outra lista, preencha **Nova lista**; vazio adiciona à atual. Produtos que já estão na lista não são duplicados nem desmarcados.
-2. No mercado, marque o que comprou. Produtos avulsos continuam entrando pelo campo **Adicionar item**.
-3. Toque em **Finalizar compra** ou **Guardar compra**. Confira a data e, se souber, informe loja, total e quantidade/unidade/preço unitário de cada produto. Campos desconhecidos ficam vazios; nunca viram zero por suposição.
-4. Ao guardar, só os itens marcados da seleção saem da lista: vão para um registro no histórico e continuam disponíveis no catálogo. Os pendentes ficam onde estão. Cancelar não altera a lista.
-5. No histórico, toque em **Anexar nota fiscal**. A foto ou PDF é enviado depois da compra; se falhar, o histórico permanece salvo e você pode tentar o anexo novamente.
+1. Em **Listas → Escolher produtos**, selecione produtos já cadastrados ou comprados. Para outra lista, preencha **Nova lista**; vazio adiciona à atual. Produtos existentes não são duplicados ou desmarcados. **Adicionar item** continua aceitando avulsos.
+2. Depois de comprar, use **Ler nota fiscal** e escolha uma foto ou PDF. O próprio aparelho lê o arquivo; nenhuma nota é enviada a um provedor de OCR.
+3. Em **Revisar nota antes de guardar**, corrija loja, data, total, nomes, quantidades, unidades e preços unitários. Confira o texto reconhecido e o arquivo original quando necessário. Remova linhas indevidas e adicione produtos que faltaram.
+4. Confira **Retirar da lista ao guardar** em cada produto. Uma correspondência única e exata de nome é sugerida; você pode trocar ou escolher **Não retirar nenhum item**. Não há vinculação por semelhança. Os itens não vinculados permanecem na lista.
+5. Marque **Conferi os produtos…** e confirme. Só então o histórico é salvo e os itens vinculados são retirados na mesma transação. No modo nuvem, a nota original é anexada depois. Se o envio falhar, a compra continua salva e você pode anexar o mesmo arquivo pelo histórico.
 
-**Limpar marcados** foi substituído por guardar a compra. A exclusão individual continua disponível para corrigir itens. Listas com compras registradas não podem ser excluídas pela interface; é possível renomeá-las sem perder o acesso ao histórico.
+**OCR pode errar:** a confirmação humana é obrigatória e fica desmarcada novamente quando você altera os campos. Nada é salvo ou enviado antes da confirmação. Cancelar a leitura ou a revisão não altera a lista, o histórico ou o Storage. O OCR cria uma **nova compra**; não use a mesma nota novamente se a compra já estiver no histórico.
 
-## O que dá para acompanhar
+O preenchimento manual permanece: marque os comprados e use **Finalizar compra / Guardar compra**. Os detalhes são opcionais; depois você pode anexar a nota. Esse anexo posterior não relê nem altera automaticamente uma compra já registrada. **Limpar marcados** foi substituído pelo histórico; exclusão individual ainda corrige itens. Listas com compras registradas podem ser renomeadas, mas não excluídas pela interface, para manter acesso ao histórico.
 
-O histórico mostra data, loja, total informado e os produtos comprados. O filtro mensal (ou **Todo o histórico**) apresenta soma dos totais informados e produtos mais frequentes. Quantidades são agrupadas por produto e unidade: kg e unidades não são somados entre si. Gastos por produto só usam linhas com quantidade e preço unitário disponíveis; descontos e diferenças em relação ao total da nota não são reconciliados automaticamente.
+## Privacidade da leitura
 
-**Compras são reposição, não medição exata do consumo.** O texto livre não é interpretado: “2 L de leite” não vira automaticamente uma quantidade estruturada. Variações de nome sem acento, maiúsculas ou espaços extras são deduplicadas; marcas e descrições diferentes não são adivinhadas como o mesmo produto.
+O app hospeda suas próprias cópias do **Tesseract.js 6.0.1**, seu motor WebAssembly e modelo de português, e do **PDF.js 5.5.207**. O motor e o modelo só são carregados quando você toca para ler; não vêm de CDN durante a leitura. Não há API paga de OCR, credencial nova, Google Drive, telemetria de nota ou envio para IA.
 
-**Exportar JSON** baixa os registros e o resumo do período selecionado, úteis para análises futuras. O backup geral também mantém o ledger. Nenhum desses arquivos inclui as imagens das notas; preservam somente suas referências no Storage. Não existe expurgo automático do histórico.
+Fotos são reconhecidas no navegador. PDFs com texto aproveitam a extração local; páginas escaneadas passam pelo OCR local. O texto bruto reconhecido e o arquivo selecionado ficam somente em memória durante a revisão; não são colocados no JSON/exportação. Depois de confirmar, os campos corrigidos e o anexo original podem ir apenas ao Supabase já utilizado pela família. O anexo original nunca é substituído pela imagem eventualmente reduzida para OCR.
 
-## Arquivos privados, fora do JSON
+Versões, licenças, origens públicas das bibliotecas e checksums ficam em `vendor/ocr/`. O download inicial do leitor exige rede e consome alguns MB de dados; o processamento usa o aparelho e pode demorar mais em celulares antigos. Não há promessa de funcionar offline antes de os componentes terem sido carregados.
 
-O histórico usa o banco já existente (`registros`, tipo `compra`). As notas ficam no bucket privado `notas-compras` do Supabase Storage, sob `familia/<compra>/<uuid>.<ext>`. Só os membros autenticados da casa podem acessá-las; visualizar gera um link temporário de 5 minutos, não um endereço público permanente. Como o app atual, este projeto atende uma única família por banco; não é um desenho multi-inquilino.
+## Limites práticos
 
-O registro guarda apenas caminho, nome, tipo e tamanho do anexo: **nenhuma imagem/base64 dentro da linha do banco ou do localStorage**. Aceita um JPEG, PNG, WebP ou PDF de até **8 MB por compra**, com verificação de assinatura no cliente. HEIC não é aceito neste MVP; escolha JPEG/PNG ou PDF. Não há compressão automática para evitar tornar notas longas ilegíveis.
+- Um **JPEG, PNG, WebP ou PDF até 8 MB por compra**. HEIC não é aceito; exporte como JPEG/PNG ou PDF.
+- Leitura de PDF até **3 páginas**; acima disso, o arquivo é recusado com aviso, nunca cortado silenciosamente. Há limite de resolução e de tempo para proteger o celular; a mensagem da tela informa quando ele é excedido.
+- O parser reconhece padrões comuns de notas brasileiras: descrição, quantidade/unidade, preço unitário, total da linha, data e total pago. Layouts diferentes, nomes quebrados, fotos ruins, descontos e caracteres ambíguos exigem correção manual. Não deduz quantidade a partir de “2 L” dentro do nome.
+- A revisão admite até **200 produtos**. Limites do parser produzem aviso; campos ausentes permanecem vazios, não zero. Confiança do OCR não é garantia de que preços estejam corretos.
+- O preço guardado por produto é **unitário**. O total da linha lido serve para conferir, sem conciliação automática. Quando existe um **valor a pagar** explícito, ele prevalece sobre o valor total anterior aos descontos, com aviso quando diferem.
 
-No modo local, lista, catálogo e histórico funcionam no navegador. Anexos exigem o modo nuvem; não há falsa promessa de sincronização ou de backup de imagens locais. Os arquivos serão a maior parte do armazenamento: seu uso cresce conforme a quantidade e tamanho das notas, separado dos registros de texto. Nenhum Google Drive ou serviço externo novo é conectado.
+Ainda não há edição de compras finalizadas, substituição de anexos, várias fotos para a mesma nota, conciliação automática de descontos, estoque real, previsão de esgotamento ou análise periódica autônoma.
 
-## Segurança ao guardar
+## Histórico e análise
 
-Na nuvem, uma função transacional confirma o histórico e remove apenas os itens da seleção original. Se alguém alterar, desmarcar ou finalizar um deles durante o processo, a operação é recusada sem apagar o restante; atualize a lista e confira novamente. Reenviar a mesma compra é idempotente e não cria duplicata. No modo local, o ledger e a remoção usam uma única gravação confirmada; falta de espaço não é anunciada como sucesso.
+O filtro mensal ou **Todo o histórico** mostra a soma dos totais informados e produtos mais frequentes. Quantidades são agrupadas por produto e unidade: kg e unidades não se misturam. Gastos por produto só usam linhas com quantidade e preço disponíveis; não precisam coincidir com o total pago, por causa de descontos e campos ausentes.
 
-Se o anexo falhar após upload, o cliente tenta limpar o objeto apenas quando o servidor confirma que não está associado. Uma falha de rede persistente pode deixar arquivo órfão, a ser revisado administrativamente; nunca se repete upload automaticamente. Uma resposta perdida após associação pode mostrar erro apesar de o anexo ter sido salvo: sincronize o histórico antes de reenviar.
+**Compras medem reposição, não consumo exato.** Acentos, maiúsculas e espaços extras são deduplicados no catálogo; marcas e descrições diferentes não são adivinhadas como um mesmo produto.
 
-## O que ficou para depois
+**Exportar JSON** baixa os registros e o resumo do período. O backup geral também guarda o histórico. Ambos incluem somente referências às notas, **não os arquivos das imagens/PDFs**. Não existe expurgo automático.
 
-- Ler a nota automaticamente (OCR/IA), extrair seus itens e conciliar preços/descontos.
-- Editar compras já finalizadas, substituir anexos, várias fotos para uma nota e análise automática periódica.
-- Estoque doméstico real, previsão de esgotamento, comparação externa de preços e backup das imagens para outro provedor.
+## Armazenamento privado e integridade
 
-Este MVP não cria contas a pagar, tarefas, postagens no Mural ou notificações. Os resumos aparecem apenas na própria tela de compras ou na exportação solicitada.
+Os dados usam a tabela `registros`, tipo `compra`, no banco existente. As notas ficam no bucket **privado** `notas-compras`, em `familia/<compra>/<uuid>.<ext>`, acessível aos membros autenticados. Abrir gera link temporário de **5 minutos**; **Baixar nota fiscal** oferece o arquivo original. Links assinados permitem acesso a quem os possuir durante sua validade; não os compartilhe. O app atual atende uma única família por banco, não múltiplas famílias no mesmo projeto.
 
-## Ativação após aprovação do PR
+O JSON do histórico armazena somente caminho, nome, tipo e tamanho do anexo: **nenhuma imagem/base64 na linha do banco ou no localStorage**. No modo local, catálogo e histórico funcionam no navegador, mas os arquivos não são guardados nem compartilhados. Guarde a nota original separadamente nesse modo.
 
-O código não executa alterações de backend sozinho. Depois de aprovação explícita, aplicar `supabase/migrations/202610220001_compras.sql` **antes de publicar o frontend**. A migração usa `schema.sql` existente, cria as funções e o bucket privado com suas políticas. É repetível e não remove dados existentes. Não exige novas credenciais ou outro serviço.
+A finalização usa snapshots e bloqueios: se outro aparelho alterar ou finalizar um item vinculado durante a revisão, a operação é recusada sem apagar o restante. Reenvio idêntico é idempotente. A compra lida pode ter linhas novas sem vínculo, inclusive sem retirar nenhum item da lista. Falta de espaço local não é anunciada como sucesso.
 
-Não aplicar a migração nem publicar esta branch durante a revisão. Sem a migração, finalizar/anexar na nuvem falha explicitamente e mantém os itens; não há fallback destrutivo. O comportamento de login, sincronização, contas e outros módulos permanece o existente.
+Se a associação de um anexo falhar depois do upload, a limpeza é best-effort e só remove um objeto confirmado como não associado. Uma falha persistente de rede pode deixar objeto órfão. Se a resposta se perder depois de salvar, sincronize o histórico antes de tentar outro upload.
 
-## Testes sem produção
+Não há criação automática de contas a pagar, tarefas, posts no Mural ou alterações de notificações. Resumos ficam na própria tela ou na exportação solicitada.
+
+## Ativação e verificação
+
+A correção da PR #26 adiciona OCR local conforme a orientação mais recente de Renato. Depois de revisar o commit exato e passar nos testes, reaplicar **somente** `supabase/migrations/202610220001_compras.sql` antes de publicar o frontend corrigido. A migração atualiza as funções e preserva o bucket privado/políticas, é repetível e não remove registros existentes. Não reexecutar `schema.sql` de exemplo sobre produção. Sem a função atualizada, a importação de linhas da nota não vinculadas à lista falha explicitamente sem fallback destrutivo.
+
+Os testes usam somente notas fictícias, navegador local com rede externa bloqueada, mocks e Postgres embutido. O teste real de OCR exercita imagem, PDF com texto e PDF escaneado. A revisão é testada separadamente para correção, cancelamento, confirmação, vínculos, falhas e preservação dos pendentes. Na ativação, testar upload, visualização e download privado com arquivo fictício e as contas já existentes; remover somente os registros temporários de teste.
 
 ```bash
-node --test testes/compras.test.js
-node --test testes/compras-store.test.js
+node --test testes/compras.test.js testes/compras-store.test.js testes/receipt-parser.test.js
 node testes/banco/compras.test.mjs supabase/schema.sql supabase/migrations/202610220001_compras.sql
 python3 testes/compras-ui.test.py
+python3 testes/receipt-ui.test.py
+python3 testes/receipt-e2e.test.py
+python3 testes/ocr/run_browser_tests.py
 ```
-
-Os testes usam apenas dados fictícios, Postgres embutido/mocks e navegador local com requisições externas bloqueadas. A validação do Storage usa um esqueleto local das tabelas/políticas do Supabase; não faz upload real em produção. Depois da aprovação e ativação, ainda é necessário um smoke test autenticado do Storage real com um arquivo fictício.

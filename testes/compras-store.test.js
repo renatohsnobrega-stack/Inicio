@@ -103,6 +103,57 @@ test('local snapshot conflict and localStorage failure leave ledger, source cach
   assert.equal(full.emitted(), 0);
 });
 
+test('reviewed receipt import without linked sources persists purchase and preserves pending list items', async () => {
+  const pending = item('i-pendente', 'Arroz');
+  pending.feito = false;
+  const app = makeApp({ initial: { item: { [pending.id]: pending } } });
+  await app.init();
+  const p = { ...purchase('nota-standalone'), origem: 'nota-revisada', itens: [
+    { itemId: 'nota-12345678-1234-1234-1234-123456789abc', texto: 'Café', quantidade: 1, unidade: 'pct', preco: 8 },
+  ] };
+  const saved = await app.api.finalizePurchase(p, []);
+  assert.equal(saved.id, p.id);
+  assert.equal(app.api.get('compra', p.id).origem, 'nota-revisada');
+  assert.deepEqual(clone(app.api.get('item', pending.id)), pending);
+});
+
+test('reviewed receipt subset removes only explicitly linked source, including a pending source', async () => {
+  const linked = item('i-linked', 'Leite');
+  linked.feito = false;
+  const untouched = item('i-other', 'Pão');
+  const app = makeApp({ initial: { item: { [linked.id]: linked, [untouched.id]: untouched } } });
+  await app.init();
+  const p = { ...purchase('nota-subset'), origem: 'nota-revisada', itens: [
+    { itemId: linked.id, texto: 'Leite', quantidade: 2, unidade: 'L', preco: 7 },
+    { itemId: 'nota-22345678-1234-1234-1234-123456789abc', texto: 'Café', quantidade: 1, unidade: 'pct', preco: 8 },
+  ] };
+  await app.api.finalizePurchase(p, [linked]);
+  assert.equal(app.api.get('item', linked.id), undefined);
+  assert.deepEqual(clone(app.api.get('item', untouched.id)), untouched);
+  assert.equal(app.api.get('compra', p.id).itens.length, 2);
+});
+
+test('receipt source conflict aborts and invalid source/line IDs are rejected; manual purchases remain strict', async () => {
+  const snapshot = item('i-linked');
+  const changed = { ...snapshot, texto: 'Alterado depois da revisão' };
+  const app = makeApp({ initial: { item: { [snapshot.id]: changed } } });
+  await app.init();
+  const receipt = { ...purchase('nota-conflict'), origem: 'nota-revisada', itens: [
+    { itemId: snapshot.id, texto: 'Leite', quantidade: 1, unidade: 'L', preco: 3 },
+    { itemId: 'nota-32345678-1234-1234-1234-123456789abc', texto: 'Café', quantidade: 1, unidade: 'pct', preco: 8 },
+  ] };
+  await assert.rejects(app.api.finalizePurchase(receipt, [snapshot]), /mudou desde a seleção/);
+  assert.equal(app.api.get('compra', receipt.id), undefined);
+  assert.deepEqual(clone(app.api.get('item', snapshot.id)), changed);
+  await assert.rejects(app.api.finalizePurchase({ ...receipt, id: 'nota-divergente', itens: [
+    { itemId: 'i-other', texto: 'Leite' }, { itemId: 'nota-42345678-1234-1234-1234-123456789abc', texto: 'Café' },
+  ] }, [snapshot]), /corresponder|id/);
+  await assert.rejects(app.api.finalizePurchase({ ...receipt, id: 'nota-sem-sintetico', itens: [
+    { itemId: 'unlinked-real-id', texto: 'Produto' },
+  ] }, []), /sintético/);
+  await assert.rejects(app.api.finalizePurchase(purchase('manual-subset'), []), /exatamente uma linha/);
+});
+
 test('cloud finalization calls atomic RPC and updates cache only after confirmation', async () => {
   const source = item('i-1');
   const failed = makeApp({ cloud: true, initial: { item: { 'i-1': source } }, rpcHandler: name => name === 'finalize_purchase' ? { data: null, error: new Error('database offline') } : { data: null, error: null } });

@@ -1840,7 +1840,7 @@ ${kinds}${filhos}`;
     },
   };
 
-  ['purchase-catalog', 'purchase-finish', 'purchase-month', 'purchase-all', 'purchase-more', 'purchase-export', 'purchase-receipt', 'purchase-receipt-open'].forEach(action => {
+  ['purchase-catalog', 'purchase-finish', 'purchase-month', 'purchase-all', 'purchase-more', 'purchase-export', 'purchase-receipt', 'purchase-receipt-open', 'purchase-receipt-download', 'purchase-ocr'].forEach(action => {
     ACTIONS[action] = el => ComprasUI.action(action, el, id => { if (id) state.lista = id; render(true); });
   });
 
