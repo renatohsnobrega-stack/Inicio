@@ -200,10 +200,57 @@ const D = (() => {
     Store.list(kind).filter(o => o.revisado === false).map(o => ({ kind, obj: o })));
 
   // ---------- Contas ----------
+  const impostoPessoal = b => !!b && typeof b.obrigacao === 'string' &&
+    Object.prototype.hasOwnProperty.call(Schema.OBRIGACOES, b.obrigacao);
+  function impostoDetalhe(b) {
+    if (!impostoPessoal(b)) return '';
+    const partes = [Schema.OBRIGACOES[b.obrigacao], b.anoReferencia];
+    if (b.referencia) partes.push(b.referencia);
+    if (b.modalidade === 'parcela') partes.push(`parcela ${b.parcela}/${b.parcelas}`);
+    else if (b.modalidade === 'unica') partes.push('cota única');
+    return partes.join(' · ');
+  }
+  function validarImposto(b) {
+    if (!b || b.obrigacao == null || b.obrigacao === '') return '';
+    if (!impostoPessoal(b)) return 'Obrigação inválida.';
+    if (b.tipo !== 'unica') return 'Imposto pessoal deve ser uma conta única.';
+    if (!Number.isInteger(b.anoReferencia) || b.anoReferencia < 1900 || b.anoReferencia > 9999) return 'Ano de referência inválido (use um inteiro entre 1900 e 9999).';
+    if (typeof b.data !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.data)) return 'Data de vencimento inválida (use AAAA-MM-DD).';
+    const [, ys, ms, ds] = b.data.match(/^(\d{4})-(\d{2})-(\d{2})$/) || [];
+    const year = Number(ys), month = Number(ms), day = Number(ds);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (year < 1 || month < 1 || month > 12 || day < 1 || day > (days[month - 1] || 0)) return 'Data de vencimento inexistente.';
+    if (typeof b.valor !== 'number' || !Number.isFinite(b.valor) || b.valor <= 0) return 'Valor do imposto deve ser um número finito maior que zero.';
+    if (typeof b.responsavel !== 'string' || !b.responsavel.trim()) return 'Responsável pelo pagamento é obrigatório.';
+    if (!['unica', 'parcela'].includes(b.modalidade)) return 'Modalidade inválida (use unica ou parcela).';
+    const temParcela = v => v !== undefined && v !== null && v !== '';
+    if (b.modalidade === 'unica' && (temParcela(b.parcela) || temParcela(b.parcelas))) return 'Cota única não deve informar parcela ou quantidade de parcelas.';
+    if (b.modalidade === 'parcela') {
+      if (!Number.isInteger(b.parcela) || b.parcela < 1 || b.parcela > 99) return 'Parcela deve ser um inteiro entre 1 e 99.';
+      if (!Number.isInteger(b.parcelas) || b.parcelas < 1 || b.parcelas > 99) return 'Quantidade de parcelas deve ser um inteiro entre 1 e 99.';
+      if (b.parcela > b.parcelas) return 'Número da parcela não pode superar o total de parcelas.';
+    }
+    for (const [field, label] of [['referencia', 'Referência'], ['guiaUrl', 'URL da guia'], ['comprovanteUrl', 'URL do comprovante']]) {
+      if (b[field] != null && typeof b[field] !== 'string') return `${label} deve ser texto.`;
+    }
+    for (const [field, label] of [['guiaUrl', 'URL da guia'], ['comprovanteUrl', 'URL do comprovante']]) {
+      const value = b[field] == null ? '' : b[field].trim();
+      if (!value) continue;
+      try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) throw new Error('URL não permitida');
+      } catch { return `${label} deve ser HTTPS válido e não pode conter credenciais.`; }
+    }
+    return '';
+  }
+
   function billOccurrences(month) {
     const [y, m] = month.split('-').map(Number);
     const out = [];
     for (const b of Store.list('conta')) {
+      // Obrigações pessoais só existem como lançamentos únicos; uma entrada inválida mensal não deve gerar cobranças.
+      if (impostoPessoal(b) && b.tipo !== 'unica') continue;
       let venc = null;
       if (b.tipo === 'unica') {
         if (b.data && b.data.startsWith(month)) venc = b.data;
@@ -436,6 +483,7 @@ const D = (() => {
     paraRevisar, recados, listas, itensDa, contatos, contatosPorCategoria, telLink, waLink,
     aniversarioDe, proximoAniversario, aniversarios, aniversariosProximos, aniversariantesEm, quandoTxt,
     billOccurrences, billStatus, contasAtencao,
+    impostoPessoal, impostoDetalhe, validarImposto,
     medActiveOn, medScheduledOn, doseKey, dosesOn, ehSuplemento, temEstoque, estoque, estoqueAcabando, fmtQtd,
     mealId, mealOwn, meal, mealResumo, suplementosDe,
     occursOn, eventsOn, eventsBetween,

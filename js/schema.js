@@ -4,6 +4,9 @@
 const Schema = (() => {
   const CATEGORIAS = ['Moradia', 'Água / Luz / Gás', 'Internet / Telefone', 'Cartão de crédito', 'Mercado',
     'Saúde', 'Educação', 'Transporte', 'Seguros', 'Impostos', 'Assinaturas', 'Outros'];
+  const OBRIGACOES = {
+    iptu: 'IPTU', ipva: 'IPVA', licenciamento: 'Licenciamento', crm_pf: 'CRM pessoa física', irpf: 'IRPF a pagar',
+  };
   const CATEG_CONTATO = ['Emergência', 'Saúde', 'Família', 'Amigos', 'Escola', 'Serviços da casa', 'Trabalho', 'Outros'];
   const SLOTS = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche', jantar: 'Jantar' };
 
@@ -28,6 +31,14 @@ const Schema = (() => {
         forma: f('texto', 'Forma de pagamento (Boleto, Pix, Débito automático…)'),
         codigo: f('texto', 'Linha digitável do boleto ou Pix copia e cola'),
         obs: f('texto', 'Observações'),
+        obrigacao: f('"" | "iptu" | "ipva" | "licenciamento" | "crm_pf" | "irpf"', 'Obrigação tributária pessoal (opcional)'),
+        anoReferencia: f('inteiro 1900-9999', 'Ano de referência da obrigação (não é necessariamente o ano do vencimento)'),
+        modalidade: f('"unica" | "parcela"', 'Cota única ou parcela manual'),
+        parcela: f('inteiro 1-99', 'Número desta parcela (somente modalidade parcela)'),
+        parcelas: f('inteiro 1-99', 'Quantidade total de parcelas (somente modalidade parcela)'),
+        referencia: f('texto', 'Imóvel ou veículo relacionado (opcional)'),
+        guiaUrl: f('URL HTTPS', 'Link HTTPS da guia (opcional; sem credenciais)'),
+        comprovanteUrl: f('URL HTTPS', 'Link HTTPS do comprovante (opcional; sem credenciais)'),
       },
       exemplo: { nome: 'Energia Enel', valor: 287.45, tipo: 'unica', data: '2026-11-10', categoria: 'Água / Luz / Gás', forma: 'Boleto', codigo: '83640000002-8 87450...' },
     },
@@ -296,9 +307,16 @@ const Schema = (() => {
     switch (kind) {
       case 'conta':
         str('nome', 'categoria', 'responsavel', 'forma', 'codigo', 'obs');
-        if (o.valor != null) o.valor = U.parseMoney(o.valor);
+        ['referencia', 'guiaUrl', 'comprovanteUrl'].forEach(k => { if (typeof o[k] === 'string') o[k] = o[k].trim(); });
+        // Converta somente inteiros em forma canônica; valores inválidos ficam visíveis para validate.
+        ['anoReferencia', 'parcela', 'parcelas'].forEach(k => {
+          if (typeof o[k] === 'string' && /^(0|[1-9]\d*)$/.test(o[k])) o[k] = Number(o[k]);
+        });
+        const ehImposto = typeof o.obrigacao === 'string' && Object.prototype.hasOwnProperty.call(OBRIGACOES, o.obrigacao);
+        if (ehImposto) o.categoria = 'Impostos';
+        if (o.valor != null && (!ehImposto || typeof o.valor !== 'string' || /^(?:R\$\s*)?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:[,.]\d{1,2})?$/.test(o.valor.trim()))) o.valor = U.parseMoney(o.valor);
         if (!o.data && o.vencimento) o.data = o.vencimento;
-        if (o.data) o.data = toYmd(o.data);
+        if (o.data && (!ehImposto || typeof o.data !== 'string' || /^\d{4}-\d{2}-\d{2}$/.test(o.data))) o.data = toYmd(o.data);
         o.tipo = o.tipo ? pickEnum(o.tipo, [[/unic|uma|once|single/, 'unica']], 'mensal') : (o.data && !o.dia ? 'unica' : 'mensal');
         if (o.tipo === 'mensal') {
           o.dia = toInt(o.dia ?? (o.data ? o.data.slice(8) : ''), 1, 31);
@@ -528,7 +546,7 @@ ${JSON.stringify(exemplo, null, 2)}
   }
 
   return {
-    CATEGORIAS, CATEG_CONTATO, SLOTS, KINDS, KINDS_FILHOS, info, COMUNS, REVISAVEIS,
+    CATEGORIAS, OBRIGACOES, CATEG_CONTATO, SLOTS, KINDS, KINDS_FILHOS, info, COMUNS, REVISAVEIS,
     kindOf, normalize, validate, resumo, parseImport, parseICS, promptIA, hash, toYmd, slug, mealId,
     parseAniversario, toAniversario, fmtAniversario,
   };

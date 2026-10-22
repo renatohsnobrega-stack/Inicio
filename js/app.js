@@ -9,6 +9,10 @@
 
   const state = {
     contasMes: U.thisMonth(),
+    impostosAno: String(new Date().getFullYear()),
+    impostosTipo: '',
+    impostosPessoa: '',
+    impostosStatus: '',
     calMes: U.thisMonth(),
     lista: null,
     importacao: null, // pré-visualização da importação: [{ kind, data, erros }]
@@ -281,6 +285,41 @@
       </div>`;
   }
 
+  // Visão dos mesmos registros de Contas: nenhuma cobrança nasce ao consultar.
+  function impostosPessoais() {
+    const todas = Store.list('conta').filter(D.impostoPessoal);
+    const anos = [...new Set([state.impostosAno, String(new Date().getFullYear()), ...todas.map(b => String(b.anoReferencia || ''))])].filter(Boolean).sort().reverse();
+    const select = (key, label, options) => `<label class="field">${esc(label)}<select aria-label="${esc(label)}" data-action="filter-impostos" data-key="${key}">${options.map(([v, l]) => `<option value="${esc(v)}" ${state[key] === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+    const linhas = todas.filter(b => (!state.impostosAno || String(b.anoReferencia) === state.impostosAno) &&
+      (!state.impostosTipo || b.obrigacao === state.impostosTipo) && (!state.impostosPessoa || ehDe(b.responsavel, state.impostosPessoa)))
+      .map(b => ({ conta: b, mes: (b.data || '').slice(0, 7), venc: b.data || '',
+        pago: b.pagos?.[(b.data || '').slice(0, 7)] || null,
+        valor: Number(b.pagos?.[(b.data || '').slice(0, 7)]?.valor ?? b.valor) || 0 }))
+      .filter(o => !state.impostosStatus || (state.impostosStatus === 'aberta' ? !o.pago : D.billStatus(o) === state.impostosStatus))
+      .sort((a, b) => a.venc.localeCompare(b.venc) || a.conta.nome.localeCompare(b.conta.nome));
+    const link = (url, label) => {
+      try { const u = new URL(url); if (u.protocol !== 'https:' || u.username || u.password) return ''; }
+      catch { return ''; }
+      return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    };
+    return panel('Impostos e taxas pessoais', `
+      <p class="muted small">IPTU, IPVA, licenciamento, CRM pessoa física e IRPF com valor a pagar. Cada cota ou parcela é cadastrada manualmente, sem repetição anual automática. Obrigações da PJ ficam fora desta seção.</p>
+      <div class="cards">
+        ${select('impostosAno', 'Ano de referência', [['', 'Todos os anos'], ...anos.map(a => [a, a])])}
+        ${select('impostosTipo', 'Tipo de obrigação', [['', 'Todos os tipos'], ...Object.entries(Schema.OBRIGACOES)])}
+        ${select('impostosPessoa', 'Responsável pelo imposto', [['', 'Todos'], ...D.responsaveis().map(p => [p, p])])}
+        ${select('impostosStatus', 'Status do imposto', [['', 'Todos os status'], ['aberta', 'A pagar (todas)'], ['atrasada', 'Atrasada'], ['pago', 'Paga']])}
+      </div>
+      <p class="small">${linhas.length} cota(s)/parcela(s) · A pagar nesta seleção: <strong>${brl(linhas.filter(o => !o.pago).reduce((s, o) => s + o.valor, 0))}</strong></p>
+      ${linhas.length ? linhas.map(o => `<article class="tax-entry">
+        <p class="small">${esc(D.impostoDetalhe(o.conta))} · Vencimento: ${esc(U.fmtDate(o.venc))}</p>
+        ${billRow(o, btn('Editar', 'edit-bill', `data-id="${esc(o.conta.id)}"`, 'small ghost'))}
+        ${o.conta.guiaUrl || o.conta.comprovanteUrl ? `<p class="small">${[link(o.conta.guiaUrl, 'Abrir guia'), link(o.conta.comprovanteUrl, 'Abrir comprovante')].filter(Boolean).join(' · ')}</p>` : ''}
+      </article>`).join('') : emptyMsg('Nenhum imposto pessoal nesta seleção. Cadastre apenas cobranças confirmadas; contas antigas não são reclassificadas automaticamente.')}
+      <p class="muted small">Os valores já entram no mês do vencimento acima; esta seção não soma cobranças em duplicidade. Links não fazem upload de documentos nem mudam suas permissões.</p>`,
+      btn('+ Imposto ou taxa pessoal', 'new-tax', '', 'small primary'));
+  }
+
   function contas() {
     const occ = D.billOccurrences(state.contasMes);
     const total = occ.reduce((s, o) => s + o.valor, 0);
@@ -305,6 +344,7 @@
             <span>${esc(cat)}</span><span class="bar"><i style="width:${total ? (v / total * 100).toFixed(1) : 0}%"></i></span>
             <span class="money">${brl(v)}</span></div>`).join('')}</div>` : emptyMsg('—'))}
       </div>
+      ${impostosPessoais()}
       ${panel(`Contas cadastradas (${todas.length})`, todas.length ? `<div class="table-wrap"><table class="table">
         <thead><tr><th>Conta</th><th>Quando</th><th>Valor</th><th>Categoria</th><th>Responsável</th><th></th></tr></thead>
         <tbody>${todas.map(b => `<tr><td><strong>${esc(b.nome)}</strong></td>
@@ -1136,24 +1176,47 @@ ${kinds}${filhos}`;
 
   // ---------- Formulários de cada módulo ----------
   function billForm(conta = {}) {
+    const imposto = v => !!v.obrigacao;
+    const mensal = v => !v.obrigacao && v.tipo === 'mensal';
+    const parcelada = v => !!v.obrigacao && v.modalidade === 'parcela';
     openForm({
       title: conta.id ? 'Editar conta' : 'Nova conta',
       values: conta,
       fields: [
         { name: 'nome', label: 'Nome da conta', required: true },
-        { name: 'valor', label: 'Valor (R$)', type: 'money', hint: 'Para contas que variam (luz, água), coloque um valor aproximado e ajuste ao pagar.' },
-        { name: 'tipo', label: 'Repetição', type: 'select', options: [['mensal', 'Todo mês'], ['unica', 'Uma vez só']], default: 'mensal' },
-        { name: 'dia', label: 'Dia do vencimento', type: 'number', min: 1, max: 31, required: true, showIf: v => v.tipo === 'mensal' },
-        { name: 'data', label: 'Data do vencimento', type: 'date', required: true, showIf: v => v.tipo === 'unica' },
-        { name: 'inicio', label: 'A partir de (mês)', type: 'month', default: U.thisMonth(), showIf: v => v.tipo === 'mensal' },
-        { name: 'fim', label: 'Até (mês) — vazio se não tem fim', type: 'month', showIf: v => v.tipo === 'mensal' },
-        { name: 'categoria', label: 'Categoria', type: 'select', options: D.CATEGORIAS },
+        { name: 'obrigacao', label: 'Imposto ou taxa pessoal', type: 'select', options: [['', 'Conta comum (sem classificação pessoal)'], ...Object.entries(Schema.OBRIGACOES)],
+          hint: 'Somente pessoa física. Não inclui tributos/renovações da PJ nem IRPF sem valor a pagar.' },
+        { name: 'anoReferencia', label: 'Ano de referência', type: 'number', min: 1900, max: 9999, required: true, showIf: imposto },
+        { name: 'referencia', label: 'Referência (imóvel ou veículo, opcional)', showIf: imposto },
+        { name: 'modalidade', label: 'Cota ou parcela', type: 'select', options: [['unica', 'Cota única'], ['parcela', 'Uma parcela']], default: 'unica', showIf: imposto,
+          hint: 'Informe o valor e vencimento desta cota/parcela. Nenhuma outra parcela ou cobrança anual será criada.' },
+        { name: 'parcela', label: 'Número desta parcela', type: 'number', min: 1, max: 99, required: true, showIf: parcelada },
+        { name: 'parcelas', label: 'Total de parcelas', type: 'number', min: 1, max: 99, required: true, showIf: parcelada },
+        { name: 'valor', label: 'Valor (R$)', type: 'money', hint: 'Impostos: valor desta cota/parcela, maior que zero. Contas comuns: pode ser aproximado e ajustado ao pagar.' },
+        { name: 'tipo', label: 'Repetição', type: 'select', options: [['mensal', 'Todo mês'], ['unica', 'Uma vez só']], default: 'mensal', showIf: v => !v.obrigacao },
+        { name: 'dia', label: 'Dia do vencimento', type: 'number', min: 1, max: 31, required: true, showIf: mensal },
+        { name: 'data', label: 'Data do vencimento', type: 'date', required: true, showIf: v => imposto(v) || v.tipo === 'unica' },
+        { name: 'inicio', label: 'A partir de (mês)', type: 'month', default: U.thisMonth(), showIf: mensal },
+        { name: 'fim', label: 'Até (mês) — vazio se não tem fim', type: 'month', showIf: mensal },
+        { name: 'categoria', label: 'Categoria', type: 'select', options: D.CATEGORIAS, showIf: v => !v.obrigacao },
         { name: 'responsavel', label: 'Quem paga', type: 'select', options: D.responsaveis() },
         { name: 'forma', label: 'Forma de pagamento', type: 'combo', options: ['Boleto', 'Pix', 'Débito automático', 'Cartão de crédito', 'Dinheiro'] },
         { name: 'codigo', label: 'Código de barras / Pix copia e cola', type: 'textarea' },
+        { name: 'guiaUrl', label: 'Link da guia (HTTPS, opcional)', showIf: imposto },
+        { name: 'comprovanteUrl', label: 'Link do comprovante (HTTPS, opcional)', showIf: imposto,
+          hint: 'Use um link com acesso restrito. Não há upload nem alteração das permissões do documento.' },
         { name: 'obs', label: 'Observações (código de barras, site, login…)', type: 'textarea' },
       ],
-      onSave: v => Store.put('conta', { ...conta, ...v }),
+      check: v => {
+        if (v.obrigacao && Object.keys(conta.pagos || {}).length && v.data !== conta.data)
+          return 'Desfaça o pagamento antes de alterar o vencimento desta obrigação.';
+        return D.validarImposto({ ...v, tipo: v.obrigacao ? 'unica' : v.tipo,
+          parcela: v.modalidade === 'parcela' ? v.parcela : '', parcelas: v.modalidade === 'parcela' ? v.parcelas : '' });
+      },
+      onSave: v => Store.put('conta', { ...conta, ...v, ...(v.obrigacao ? {
+        tipo: 'unica', categoria: 'Impostos', dia: '', inicio: '', fim: '',
+        parcela: v.modalidade === 'parcela' ? v.parcela : '', parcelas: v.modalidade === 'parcela' ? v.parcelas : '',
+      } : {}) }),
       onDelete: conta.id ? () => Store.remove('conta', conta.id) : null,
     });
   }
@@ -1352,6 +1415,8 @@ ${kinds}${filhos}`;
       location.hash = '#/imprimir';
     },
 
+    'new-tax': () => billForm({ obrigacao: 'iptu', tipo: 'unica', categoria: 'Impostos', anoReferencia: new Date().getFullYear(), modalidade: 'unica', responsavel: D.eu() }),
+    'filter-impostos': el => { if (['impostosAno', 'impostosTipo', 'impostosPessoa', 'impostosStatus'].includes(el.dataset.key)) { state[el.dataset.key] = el.value; render(true); } },
     'new-bill': () => billForm(),
     'edit-bill': el => billForm(Store.get('conta', el.dataset.id)),
     'pay-bill': el => {
