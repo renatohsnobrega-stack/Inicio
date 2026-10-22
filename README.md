@@ -14,6 +14,7 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 | **Calendário** | Compromissos (com repetição semanal, mensal ou anual — bom para aniversários) e vencimentos das contas |
 | **Tarefas** | Tudo organizado pelo prazo, em colunas **Atrasado · Hoje · Próximos 7 dias · Depois · Sem prazo** (as duas últimas recolhidas). Adicionar rápido com Hoje / Amanhã / Em 7 dias. **Foco do dia**: até 3 itens por pessoa, com barra de progresso. Abas por pessoa. Rotinas que se repetem (todo dia, em dias da semana ou uma vez por mês), por cômodo e responsável |
 | **Listas** | Listas compartilhadas (compras, farmácia, casa…): um adiciona, o outro vê na hora no mercado; mostra quem adicionou. Item pode ter prazo: aparece também em Tarefas |
+| **Veículos** | Vários veículos, manutenção/OBD e multas em grupos distintos, datas e prazos manuais, PDFs e imagens. Defesa e recurso têm campos próprios. Sem tarefas ou avisos automáticos. [Como usar e limites](docs/VEICULOS.md) |
 | **Contatos** | Médicos, escola, serviços da casa e números de emergência, com botão de ligar e de WhatsApp |
 | **Automação** | Importar dados de conversas com IA e do Google Agenda, chaves de API para agentes (Claude, Gemini, Manus, n8n…) e exportar um resumo da rotina para uma IA |
 | **Imprimir** | Folhas A4 prontas para deixar nos lugares certos da casa |
@@ -128,7 +129,7 @@ testes/               testes automáticos das regras e integrações (node teste
 
 ## Ideias para as próximas versões
 
-O MVP do Foco permite **Começar · Pausar · Retomar** uma pendência, com próximo passo opcional, sem cronômetro ou novas notificações. Veja [o funcionamento, os testes e os próximos itens 7 (carro) e 8 (impostos e taxas)](docs/FOCO-E-PROXIMOS-ITENS.md). O item 7 (carro) continua apenas registrado. O item 8 tem um [MVP de obrigações pessoais dentro de Contas](docs/IMPOSTOS-PESSOAIS.md); tributos e renovações da PJ ficam para a sessão da PJ.
+O MVP do Foco permite **Começar · Pausar · Retomar** uma pendência, com próximo passo opcional, sem cronômetro ou novas notificações. Veja [o funcionamento e os testes](docs/FOCO-E-PROXIMOS-ITENS.md). O item 7 tem um [MVP de Veículos](docs/VEICULOS.md), entregue por PR para revisão, com manutenção anual, OBD, anexos e multas. O item 8 tem um [MVP de obrigações pessoais dentro de Contas](docs/IMPOSTOS-PESSOAIS.md); tributos e renovações da PJ ficam para a sessão da PJ.
 
 - Lembretes por notificação no celular (horário do remédio, conta vencendo amanhã)
 - Ingredientes do cardápio enviados direto para a lista de compras

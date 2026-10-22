@@ -13,6 +13,9 @@
     impostosTipo: '',
     impostosPessoa: '',
     impostosStatus: '',
+    veiculo: '',
+    veiculoTipo: '',
+    veiculoStatus: '',
     calMes: U.thisMonth(),
     lista: null,
     importacao: null, // pré-visualização da importação: [{ kind, data, erros }]
@@ -31,7 +34,7 @@
   const NAV = [
     ['painel', 'Painel'], ['mural', 'Mural'], ['contas', 'Contas'], ['remedios', 'Remédios'],
     ['alimentacao', 'Alimentação'], ['filhos', 'Filhos'], ['calendario', 'Calendário'], ['tarefas', 'Tarefas'],
-    ['listas', 'Listas'], ['contatos', 'Contatos'], ['aniversarios', 'Aniversários'], ['imprimir', 'Imprimir'],
+    ['veiculos', 'Veículos'], ['listas', 'Listas'], ['contatos', 'Contatos'], ['aniversarios', 'Aniversários'], ['imprimir', 'Imprimir'],
     ['automacao', 'Automação'], ['ajustes', 'Ajustes'],
   ];
   // Barra de baixo no celular; o resto fica em "Mais".
@@ -47,6 +50,7 @@
     filhos: '<circle cx="12" cy="8.5" r="4.5"/><path d="M5 20.5c1-3.5 3.8-5 7-5s6 1.5 7 5"/>',
     calendario: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     tarefas: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+    veiculos: '<path d="M4 11l2-6h12l2 6M3 11h18v7H3zM6 18v2M18 18v2M6 14h2M16 14h2"/>',
     listas: '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="5" cy="7" r=".8"/><circle cx="5" cy="12" r=".8"/><circle cx="5" cy="17" r=".8"/>',
     contatos: '<path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z"/>',
     aniversarios: '<path d="M4 20h16M5 20v-7h14v7M5 16.5c2 1.3 4 1.3 7 0s5-1.3 7 0M12 13V9.5M12 7c-.9-.9-.9-2 0-3.3.9 1.3.9 2.4 0 3.3z"/>',
@@ -445,6 +449,47 @@
       ${monthNav('calMes', month)}
       <div class="cal">${U.WDS.map(d => `<div class="cal-h">${d}</div>`).join('')}${cells.join('')}</div>
       ${panel('Compromissos do mês', eventos.length ? eventos.map(eventLine).join('') : emptyMsg('Nenhum compromisso neste mês.'))}`;
+  }
+
+  // ---------- Veículos (sem criação de tarefas, recorrências ou notificações) ----------
+  function veiculos() {
+    const carros = Store.list('veiculo');
+    const todos = Store.list('registro_veiculo');
+    const registros = Veiculos.ordenar(todos.filter(r => (!state.veiculo || r.veiculo === state.veiculo) &&
+      (!state.veiculoTipo || r.tipo === state.veiculoTipo) && (!state.veiculoStatus || r.status === state.veiculoStatus)));
+    const filtro = (key, label, options) => `<label class="field">${esc(label)}<select aria-label="${esc(label)}" data-action="filter-veiculos" data-key="${key}">${options.map(([v, l]) =>
+      `<option value="${esc(v)}" ${state[key] === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+    const card = r => {
+      const carro = Store.get('veiculo', r.veiculo);
+      const prazos = Veiculos.prazos(r);
+      const proximo = Veiculos.proximoPrazo(r);
+      const status = r.status === 'resolvido' ? 'Resolvido' : 'Pendente';
+      return `<article class="panel vehicle-entry ${proximo && proximo < U.today() ? 'status-atrasada' : ''}">
+        <header class="panel-head"><h3>${esc(r.titulo)}</h3><span class="badge">${esc(Veiculos.TIPOS[r.tipo] || 'Tipo desconhecido')} · ${status}</span></header>
+        <p class="small">${esc(carro?.nome || 'Veículo indisponível')} ${r.responsavel ? `· ${esc(r.responsavel)}` : ''}</p>
+        <p class="small">Registrado em ${esc(U.fmtDate(r.data))}${r.realizadaEm ? ` · Realizado em ${esc(U.fmtDate(r.realizadaEm))}` : ''}${r.ocorrenciaEm ? ` · Infração em ${esc(U.fmtDate(r.ocorrenciaEm))}` : ''}</p>
+        ${prazos.map(p => `<p><strong>${esc(p.label)}:</strong> ${esc(U.fmtDate(p.data))} ${r.status !== 'resolvido' ? prazoBadge(p.data) : ''}</p>`).join('')}
+        ${!prazos.length ? '<p class="muted small">Prazo não informado.</p>' : ''}
+        ${r.tipo === 'multa' ? `<p class="small">Defesa: ${r.prazoDefesa ? esc(U.fmtDate(r.prazoDefesa)) : 'não informada'} · Recurso: ${r.prazoRecurso ? esc(U.fmtDate(r.prazoRecurso)) : 'não informado'}${r.autoNumero ? ` · Auto: ${esc(r.autoNumero)}` : ''}</p>` : ''}
+        ${r.km !== '' && r.km != null ? `<p class="small">Quilometragem: ${esc(r.km)} km</p>` : ''}
+        ${r.valor !== '' && r.valor != null ? `<p class="small">Valor: ${brl(r.valor)}</p>` : ''}
+        ${r.obs ? `<p>${nl2br(r.obs)}</p>` : ''}
+        <div class="actions">${(Array.isArray(r.anexos) ? r.anexos : []).map((a, i) => btn(`Baixar: ${esc(a.nome)}`, 'download-veiculo-anexo', `data-id="${esc(r.id)}" data-index="${i}"`, 'small')).join('')}
+          ${btn('Editar registro', 'edit-veiculo-registro', `data-id="${esc(r.id)}"`, 'small ghost')}</div>
+      </article>`;
+    };
+    const grupo = (titulo, lista) => panel(titulo, lista.length ? lista.map(card).join('') : emptyMsg('Nenhum registro nesta seleção.'));
+    return pageHead('Veículos', 'Manutenções, OBD e multas — somente registros e prazos informados por você.',
+      btn('+ Veículo', 'new-veiculo') + (carros.length ? btn('+ Registro', 'new-veiculo-registro', '', 'primary') : '')) +
+      `<p class="muted small">Sem lembretes automáticos. Compartilhado com as contas autorizadas da casa, como as Contas. IPVA e licenciamento continuam em Contas → Impostos e taxas pessoais.</p>` +
+      panel('Seus veículos', carros.length ? carros.map(v => `<div class="row"><span class="grow vehicle-name"><strong>${esc(v.nome)}</strong><small>${esc([v.modelo, v.placa].filter(Boolean).join(' · '))}</small></span>
+        ${btn('Editar veículo', 'edit-veiculo', `data-id="${esc(v.id)}"`, 'small ghost')}</div>`).join('') : emptyMsg('Nenhum veículo cadastrado. Comece em “+ Veículo”; nenhum dado é presumido.')) +
+      (carros.length || todos.length ? `<div class="vehicle-filters">
+        ${filtro('veiculo', 'Veículo', [['', 'Todos os veículos'], ...carros.map(v => [v.id, v.nome])])}
+        ${filtro('veiculoTipo', 'Tipo de registro', [['', 'Todos os tipos'], ...Object.entries(Veiculos.TIPOS)])}
+        ${filtro('veiculoStatus', 'Status do registro', [['', 'Todos os status'], ['pendente', 'Pendente'], ['resolvido', 'Resolvido']])}</div>
+        ${grupo('Manutenções e diagnósticos OBD', registros.filter(r => r.tipo !== 'multa'))}
+        ${grupo('Multas de trânsito', registros.filter(r => r.tipo === 'multa'))}` : '');
   }
 
   function tarefas() {
@@ -992,7 +1037,7 @@ ${kinds}${filhos}`;
       </div>`;
   }
 
-  const VIEWS = { painel, mural, contas, remedios, alimentacao, filhos, calendario, tarefas, listas, contatos, aniversarios, imprimir, automacao, ajustes };
+  const VIEWS = { painel, mural, contas, remedios, alimentacao, filhos, calendario, tarefas, veiculos, listas, contatos, aniversarios, imprimir, automacao, ajustes };
 
   // ---------- Render ----------
   const currentRoute = () => {
@@ -1094,6 +1139,10 @@ ${kinds}${filhos}`;
       case 'textarea':
         input = `<textarea id="${id}" name="${f.name}" rows="3">${esc(v)}</textarea>`;
         break;
+      case 'attachments':
+        input = `<input id="${id}" name="${f.name}" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" multiple>
+          ${(f.anexos || []).map((a, i) => `<label class="check-row"><input type="checkbox" name="${f.name}-keep" value="${i}" checked> Manter ${esc(a.nome)}</label>`).join('')}`;
+        break;
       case 'weekdays':
         input = `<div class="weekdays">${U.WDS.map((d, i) => `<label><input type="checkbox" name="${f.name}" value="${i}"
           ${(v || []).includes(i) ? 'checked' : ''}><span>${d}</span></label>`).join('')}</div>`;
@@ -1119,6 +1168,7 @@ ${kinds}${filhos}`;
     if (f.type === 'weekdays') return [...form.querySelectorAll(`input[name="${f.name}"]:checked`)].map(i => +i.value);
     const el = form.querySelector(`[name="${f.name}"]`);
     switch (f.type) {
+      case 'attachments': return { existentes: [...form.querySelectorAll(`input[name="${f.name}-keep"]:checked`)].map(i => f.anexos[Number(i.value)]), files: [...el.files] };
       case 'bool': return el.checked;
       case 'money': return U.parseMoney(el.value);
       case 'number': return el.value === '' ? '' : Number(el.value);
@@ -1145,17 +1195,22 @@ ${kinds}${filhos}`;
     form.addEventListener('change', sync);
     form.addEventListener('input', sync);
     sync();
+    let saving = false;
+    form.addEventListener('keydown', e => { if (saving && e.key === 'Escape') e.preventDefault(); });
     form.querySelectorAll('[data-close]').forEach(b => { b.onclick = () => dlg.close(); });
     if (onDelete) {
       form.querySelector('[data-del]').onclick = async () => {
         if (!confirm('Excluir este item?')) return;
-        dlg.close();
-        await onDelete();
-        toast('Excluído');
+        try {
+          await onDelete();
+          dlg.close();
+          toast('Excluído');
+        } catch (e) { alert(e.message || 'Não foi possível excluir. Tente novamente.'); }
       };
     }
     form.onsubmit = async e => {
       e.preventDefault();
+      if (saving) return;
       const data = read();
       const missing = fields.find(f => f.required && (!f.showIf || f.showIf(data)) &&
         (data[f.name] === '' || data[f.name] == null || (Array.isArray(data[f.name]) && !data[f.name].length)));
@@ -1166,15 +1221,85 @@ ${kinds}${filhos}`;
       }
       const erro = check?.(data);
       if (erro) { alert(erro); return; }
-      dlg.close();
-      await onSave(data);
-      toast('Salvo ✔');
+      saving = true;
+      const buttons = [...form.querySelectorAll('button')];
+      buttons.forEach(b => { b.disabled = true; });
+      try {
+        await onSave(data);
+        dlg.close();
+        toast('Salvo ✔');
+      } catch (e) {
+        alert(e.message || 'Não foi possível salvar. Tente novamente.');
+      } finally {
+        saving = false;
+        buttons.forEach(b => { b.disabled = false; });
+      }
     };
     dlg.showModal();
     form.querySelector('input:not([type=checkbox]), select, textarea')?.focus();
   }
 
   // ---------- Formulários de cada módulo ----------
+  function veiculoForm(v = {}) {
+    const vinculado = () => Store.list('registro_veiculo').some(r => r.veiculo === v.id);
+    openForm({
+      title: v.id ? 'Editar veículo' : 'Novo veículo', values: v,
+      fields: [
+        { name: 'nome', label: 'Nome do veículo', required: true, hint: 'Use um nome que você reconheça. Placa e modelo são opcionais.' },
+        { name: 'placa', label: 'Placa (opcional)' },
+        { name: 'modelo', label: 'Modelo / ano (opcional)' },
+        { name: 'obs', label: 'Observações', type: 'textarea', hint: 'Para excluir um veículo, exclua antes seus registros. Nada é apagado em cascata.' },
+      ],
+      check: Veiculos.validarVeiculo,
+      onSave: dados => Store.putConfirmed('veiculo', { ...v, ...dados }),
+      onDelete: v.id ? async () => {
+        if (vinculado()) throw new Error('Este veículo tem registros. Exclua-os primeiro para não perder o histórico.');
+        await Store.removeConfirmed('veiculo', v.id);
+        if (state.veiculo === v.id) { state.veiculo = ''; render(true); }
+      } : null,
+    });
+  }
+
+  function registroVeiculoForm(r = {}) {
+    const carros = Store.list('veiculo');
+    if (!carros.length) return toast('Cadastre um veículo primeiro.');
+    const multa = v => v.tipo === 'multa';
+    const manutencao = v => !multa(v);
+    const limpar = v => ({ ...v, ...(multa(v) ? { realizadaEm: '', km: '' } : { ocorrenciaEm: '', autoNumero: '', prazoDefesa: '', prazoRecurso: '' }) });
+    openForm({
+      title: r.id ? 'Editar registro do veículo' : 'Novo registro do veículo',
+      values: { veiculo: state.veiculo || carros[0].id, data: U.today(), tipo: 'manutencao', status: 'pendente', responsavel: D.eu(), ...r },
+      fields: [
+        { name: 'veiculo', label: 'Veículo', type: 'select', options: carros.map(v => [v.id, v.nome]), required: true },
+        { name: 'tipo', label: 'Tipo de registro', type: 'select', options: Object.entries(Veiculos.TIPOS), required: true },
+        { name: 'titulo', label: 'Título do registro', required: true },
+        { name: 'data', label: 'Data do registro', type: 'date', required: true },
+        { name: 'status', label: 'Status', type: 'select', options: [['pendente', 'Pendente'], ['resolvido', 'Resolvido']], hint: 'Resolvido é uma marcação manual; não significa pagamento ou recurso enviado pelo app.' },
+        { name: 'responsavel', label: 'Responsável', type: 'select', options: [['', 'Não informado'], ...D.responsaveis().map(p => [p, p])] },
+        { name: 'realizadaEm', label: 'Manutenção / diagnóstico realizado em', type: 'date', showIf: manutencao },
+        { name: 'km', label: 'Quilometragem (opcional)', type: 'number', min: 0, step: 1, showIf: manutencao },
+        { name: 'prazo', label: 'Prazo / vencimento', type: 'date', hint: 'Manutenção: próxima data informada pela oficina. Multa: vencimento do pagamento. Vazio = não informado; nenhuma recorrência é criada.' },
+        { name: 'ocorrenciaEm', label: 'Data da infração (opcional)', type: 'date', showIf: multa },
+        { name: 'autoNumero', label: 'Número do auto de infração (opcional)', showIf: multa },
+        { name: 'prazoDefesa', label: 'Prazo de defesa', type: 'date', showIf: multa },
+        { name: 'prazoRecurso', label: 'Prazo de recurso', type: 'date', showIf: multa, hint: 'Copie as datas da notificação oficial. O app não calcula prazos legais nem apresenta defesa/recurso.' },
+        { name: 'valor', label: 'Valor (R$, opcional)', type: 'money' },
+        { name: 'anexos', label: 'Anexos: PDF ou imagem', type: 'attachments', anexos: Array.isArray(r.anexos) ? r.anexos : [],
+          hint: 'OBD, manutenção anual, comprovantes ou notificação da multa. Até 3 arquivos, 1 MB cada, 2 MB no total. PDF, PNG, JPEG ou WebP. Desmarque “Manter” para remover ao salvar. Compartilhados com a casa e incluídos no backup.' },
+        { name: 'obs', label: 'Observações', type: 'textarea' },
+      ],
+      check: v => Veiculos.validarRegistro(limpar(v), Store.list('veiculo')) || Veiculos.validarSelecao(v.anexos.existentes, v.anexos.files),
+      onSave: async v => {
+        const dados = limpar(v);
+        const erro = Veiculos.validarRegistro(dados, Store.list('veiculo'));
+        if (erro) throw new Error(erro);
+        const anexos = await Veiculos.lerAnexos(v.anexos.existentes, v.anexos.files);
+        await Store.putConfirmed('registro_veiculo', { ...r, ...dados, anexos });
+      },
+      onDelete: r.id ? () => Store.removeConfirmed('registro_veiculo', r.id) : null,
+    });
+  }
+
   function billForm(conta = {}) {
     const imposto = v => !!v.obrigacao;
     const mensal = v => !v.obrigacao && v.tipo === 'mensal';
@@ -1405,6 +1530,16 @@ ${kinds}${filhos}`;
 
   // ---------- Ações ----------
   const ACTIONS = {
+    'new-veiculo': () => veiculoForm(),
+    'edit-veiculo': el => { const v = Store.get('veiculo', el.dataset.id); if (v) veiculoForm(v); },
+    'new-veiculo-registro': () => registroVeiculoForm(),
+    'edit-veiculo-registro': el => { const r = Store.get('registro_veiculo', el.dataset.id); if (r) registroVeiculoForm(r); },
+    'filter-veiculos': el => { if (['veiculo', 'veiculoTipo', 'veiculoStatus'].includes(el.dataset.key)) { state[el.dataset.key] = el.value; render(true); } },
+    'download-veiculo-anexo': el => {
+      const r = Store.get('registro_veiculo', el.dataset.id);
+      try { Veiculos.baixar(r?.anexos?.[Number(el.dataset.index)]); }
+      catch (e) { alert(e.message || 'Não foi possível baixar o anexo.'); }
+    },
     'month-shift': el => { state[el.dataset.key] = U.addMonths(state[el.dataset.key], +el.dataset.n); render(true); },
     'goto-print': el => {
       state.print.sheet = el.dataset.sheet;
