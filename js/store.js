@@ -10,6 +10,9 @@ const Store = (() => {
   let sb = null;
   let user = null;
   let profileName = '';
+  // Em nuvem, mantém o JSONB original separado do objeto normalizado para a UI. Assim snapshots
+  // legados (sem id/campos opcionais no data) continuam comparáveis byte-semantically via jsonb.
+  const itemRawSnapshots = new Map();
   let onError = e => alert('Não foi possível salvar: ' + (e.message || e));
   const listeners = new Set();
   const emit = () => listeners.forEach(fn => fn());
@@ -57,11 +60,13 @@ const Store = (() => {
   const setRow = (kind, id, data) => {
     const obj = Schema.normalize(kind, { ...data, id: data?.id || id });
     (cache[kind] = cache[kind] || {})[obj.id] = obj;
+    if (kind === 'item') itemRawSnapshots.set(obj.id, { raw: JSON.parse(JSON.stringify(data)), normalized: JSON.parse(JSON.stringify(obj)) });
     return obj;
   };
 
   async function loadCloud() {
     cache = {};
+    itemRawSnapshots.clear();
     const size = 1000;
     for (let from = 0; ; from += size) {
       const { data, error } = await sb.from('registros').select('kind,id,data')
@@ -83,6 +88,7 @@ const Store = (() => {
         if (p.eventType === 'DELETE') {
           const o = p.old || {};
           if (cache[o.kind]) delete cache[o.kind][o.id];
+          if (o.kind === 'item') itemRawSnapshots.delete(o.id);
         } else {
           setRow(p.new.kind, p.new.id, p.new.data);
         }
@@ -179,6 +185,140 @@ const Store = (() => {
     return data;
   }
 
+  const canonical = value => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])]));
+    return value;
+  };
+  const sameJson = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+  const withoutReceipt = value => { const copy = { ...value }; delete copy.nota; return copy; };
+
+  // A finalização grava o ledger e remove snapshots de itens numa única transação (RPC na nuvem,
+  // gravação localStorage única no modo local). Em nenhum caso a interface antecipa a confirmação.
+  async function finalizePurchase(purchase, sources) {
+    if (!purchase || !purchase.id || !Array.isArray(purchase.itens) || !Array.isArray(sources)) {
+      throw new Error('Compra inválida: informe id, itens e snapshots originais dos itens marcados.');
+    }
+    const obj = Schema.normalize('compra', { ...purchase, id: String(purchase.id) });
+    const snapshots = sources.map(source => {
+      if (!source || typeof source !== 'object' || source.id == null || String(source.id).trim() === '') {
+        throw new Error('Snapshot inválido: cada item marcado precisa ter id.');
+      }
+      return { id: String(source.id), snapshot: JSON.parse(JSON.stringify(source)) };
+    });
+    if (new Set(snapshots.map(s => s.id)).size !== snapshots.length) throw new Error('Snapshot inválido: há itens repetidos.');
+    const lineIds = obj.itens.map(line => String(line?.itemId ?? ''));
+    if (!lineIds.length || lineIds.some(id => !id) || new Set(lineIds).size !== lineIds.length ||
+        lineIds.length !== snapshots.length || lineIds.some(id => !snapshots.some(source => source.id === id))) {
+      throw new Error('A compra deve conter exatamente uma linha para cada item selecionado.');
+    }
+
+    if (mode === 'local') {
+      const existing = cache.compra?.[obj.id];
+      if (existing) {
+        if (sameJson(withoutReceipt(existing), withoutReceipt(obj))) return existing;
+        throw new Error('Já existe uma compra finalizada com este id e dados diferentes.');
+      }
+      for (const source of snapshots) {
+        const current = cache.item?.[source.id];
+        if (!current) throw new Error(`O item ${source.id} não está mais ativo; atualize a lista e tente novamente.`);
+        if (!sameJson(current, source.snapshot)) throw new Error(`O item ${source.id} mudou desde a seleção; atualize a lista antes de finalizar.`);
+      }
+      const next = { ...cache, compra: { ...(cache.compra || {}), [obj.id]: obj }, item: { ...(cache.item || {}) } };
+      snapshots.forEach(({ id }) => { delete next.item[id]; });
+      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); }
+      catch { throw new Error('Não foi possível salvar a compra neste navegador. Libere espaço ou reduza os dados e tente novamente.'); }
+      cache = next;
+      snapshots.forEach(({ id }) => itemRawSnapshots.delete(id));
+      emit();
+      return obj;
+    }
+
+    const alreadySaved = cache.compra?.[obj.id];
+    if (alreadySaved) {
+      if (sameJson(withoutReceipt(alreadySaved), withoutReceipt(obj))) return alreadySaved;
+      throw new Error('Já existe uma compra finalizada com este id e dados diferentes.');
+    }
+    const cloudSnapshots = snapshots.map(({ id, snapshot }) => {
+      const raw = itemRawSnapshots.get(id);
+      if (!raw || !sameJson(raw.normalized, snapshot)) {
+        throw new Error(`O item ${id} mudou desde a seleção; atualize a lista antes de finalizar.`);
+      }
+      return { id, snapshot: raw.raw };
+    });
+    const saved = await rpc('finalize_purchase', { p_purchase: obj, p_sources: cloudSnapshots });
+    const confirmed = saved || obj;
+    // Realtime pode já ter trazido alterações concorrentes. Só retire do cache o snapshot ainda igual.
+    const nextItems = { ...(cache.item || {}) };
+    snapshots.forEach(({ id, snapshot }) => {
+      if (nextItems[id] && sameJson(nextItems[id], snapshot)) {
+        delete nextItems[id];
+        itemRawSnapshots.delete(id);
+      }
+    });
+    cache = { ...cache, item: nextItems };
+    setRow('compra', obj.id, confirmed);
+    emit();
+    return get('compra', obj.id);
+  }
+
+  const RECEIPT_TYPES = {
+    'image/jpeg': ['jpg', 'jpeg'], 'image/png': ['png'], 'image/webp': ['webp'], 'application/pdf': ['pdf'],
+  };
+  async function validateReceiptFile(file) {
+    if (!file || !RECEIPT_TYPES[file.type] || file.size < 1 || file.size > 8 * 1024 * 1024) {
+      throw new Error('Nota inválida: use JPEG, PNG, WebP ou PDF com até 8 MB.');
+    }
+    const ext = String(file.name || '').split('.').pop().toLowerCase();
+    if (!RECEIPT_TYPES[file.type].includes(ext)) throw new Error('A extensão do arquivo não corresponde ao tipo informado.');
+    if (typeof file.arrayBuffer !== 'function') throw new Error('Não foi possível verificar o conteúdo deste arquivo.');
+    const b = new Uint8Array(await file.arrayBuffer());
+    const is = (offset, bytes) => bytes.every((byte, i) => b[offset + i] === byte);
+    const signatureOK = file.type === 'image/jpeg' ? is(0, [0xff, 0xd8, 0xff])
+      : file.type === 'image/png' ? is(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        : file.type === 'image/webp' ? b.length >= 12 && is(0, [0x52, 0x49, 0x46, 0x46]) && is(8, [0x57, 0x45, 0x42, 0x50])
+          : is(0, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+    if (!signatureOK) throw new Error('A assinatura do arquivo não corresponde a JPEG, PNG, WebP ou PDF.');
+    return ext;
+  }
+
+  async function attachPurchaseReceipt(id, file) {
+    if (mode !== 'cloud' || !sb) throw new Error('Anexar nota exige conexão com a nuvem; arquivos nunca são guardados localmente.');
+    const purchase = get('compra', id);
+    if (!purchase) throw new Error('Compra não encontrada. Sincronize o histórico e tente novamente.');
+    if (purchase.nota) throw new Error('Esta compra já tem uma nota anexada.');
+    const ext = await validateReceiptFile(file);
+    const uuid = crypto.randomUUID();
+    const path = `familia/${id}/${uuid}.${ext}`;
+    const { error: uploadError } = await sb.storage.from('notas-compras').upload(path, file, { contentType: file.type, upsert: false });
+    if (uploadError) throw uploadError;
+    const nota = { path, nome: String(file.name || 'nota'), type: file.type, size: file.size };
+    let saved;
+    try {
+      saved = await rpc('attach_purchase_receipt', { p_id: String(id), p_nota: nota });
+    } catch (error) {
+      // Confirma que o path segue órfão antes de limpar; se a resposta do RPC se perdeu após commit,
+      // a função do banco detecta a referência e evita apagar o anexo já associado.
+      try {
+        const unattached = await rpc('purchase_receipt_path_unattached', { p_id: String(id), p_path: path });
+        if (unattached) await sb.storage.from('notas-compras').remove([path]);
+      } catch { /* limpeza best-effort; pode restar um objeto órfão se rede/política falhar */ }
+      throw error;
+    }
+    setRow('compra', String(id), saved || { ...purchase, nota });
+    emit();
+    return get('compra', String(id));
+  }
+
+  async function purchaseReceiptUrl(id) {
+    if (mode !== 'cloud' || !sb) throw new Error('Visualizar nota exige conexão com a nuvem.');
+    const purchase = get('compra', id);
+    if (!purchase?.nota?.path) throw new Error('Esta compra não tem nota anexada.');
+    const { data, error } = await sb.storage.from('notas-compras').createSignedUrl(purchase.nota.path, 300);
+    if (error) throw error;
+    return data.signedUrl;
+  }
+
   const exportAll = () => JSON.parse(JSON.stringify(cache));
 
   // Mescla um backup (mesmo formato do exportAll) aos dados atuais.
@@ -199,6 +339,7 @@ const Store = (() => {
 
   return {
     init, signIn, signOut, loadCloud, list, get, put, putConfirmed, publishRecado, remove, removeConfirmed, removeMany, exportAll, importAll, rpc,
+    finalizePurchase, attachPurchaseReceipt, purchaseReceiptUrl,
     config: () => window.APP_CONFIG || {},
     mode: () => mode,
     user: () => user,

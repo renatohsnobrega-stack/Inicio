@@ -596,9 +596,9 @@
         </form>
         ${pend.length ? pend.map(itemRow).join('') : emptyMsg('Nada pendente nesta lista.')}
         ${feitos.length ? `<div class="done-head"><span>✔ Já resolvidos (${feitos.length})</span>
-          ${btn('Limpar marcados', 'clear-done', `data-lista="${esc(cur.id)}"`, 'small')}</div>${feitos.map(itemRow).join('')}` : ''}
+          ${btn('Guardar compra', 'purchase-finish', `data-id="${esc(cur.id)}"`, 'small')}</div>${feitos.map(itemRow).join('')}` : ''}
         <div class="actions" style="margin-top:12px">${btn('Editar / excluir lista', 'edit-list', `data-id="${esc(cur.id)}"`, 'small ghost')}</div>
-      </section>`;
+      </section>${ComprasUI.render(cur)}`;
   }
 
   function contatos() {
@@ -1434,6 +1434,7 @@ ${kinds}${filhos}`;
       ],
       onSave: async v => { const nova = await Store.put('lista', { criadaEm: new Date().toISOString(), ...l, ...v }); state.lista = nova.id; render(true); },
       onDelete: l.id ? async () => {
+        if (Store.list('compra').some(c => c.lista === l.id)) throw new Error('Esta lista tem histórico de compras. Para preservá-lo acessível, edite o nome em vez de excluir a lista.');
         await Store.removeMany('item', D.itensDa(l.id).map(i => i.id));
         await Store.remove('lista', l.id);
         state.lista = null;
@@ -1708,8 +1709,7 @@ ${kinds}${filhos}`;
     'edit-item': (el, e) => { e.preventDefault(); itemForm(Store.get('item', el.dataset.id)); },
     'del-item': (el, e) => { e.preventDefault(); Store.remove('item', el.dataset.id); },
     'clear-done': el => {
-      const ids = D.itensDa(el.dataset.lista).filter(i => i.feito).map(i => i.id);
-      if (ids.length && confirm(`Remover ${ids.length} itens marcados?`)) Store.removeMany('item', ids);
+      ComprasUI.action('purchase-finish', { dataset: { id: el.dataset.lista } }, id => { if (id) state.lista = id; render(true); });
     },
 
     'pick-filho': el => { state.filho = el.dataset.pessoa; render(true); },
@@ -1839,6 +1839,10 @@ ${kinds}${filhos}`;
       toast('Limpo ✔');
     },
   };
+
+  ['purchase-catalog', 'purchase-finish', 'purchase-month', 'purchase-all', 'purchase-more', 'purchase-export', 'purchase-receipt', 'purchase-receipt-open'].forEach(action => {
+    ACTIONS[action] = el => ComprasUI.action(action, el, id => { if (id) state.lista = id; render(true); });
+  });
 
   function bindEvents() {
     const main = $main();

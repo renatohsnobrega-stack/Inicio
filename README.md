@@ -13,7 +13,7 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 | **Alimentação** | Cardápio fixo da semana (café, almoço, lanche e jantar) da família e de cada pessoa (o que ficar vazio usa o da família), suplementos de cada um e observações da dieta |
 | **Calendário** | Compromissos (com repetição semanal, mensal ou anual — bom para aniversários) e vencimentos das contas |
 | **Tarefas** | Tudo organizado pelo prazo, em colunas **Atrasado · Hoje · Próximos 7 dias · Depois · Sem prazo** (as duas últimas recolhidas). Adicionar rápido com Hoje / Amanhã / Em 7 dias. **Foco do dia**: até 3 itens por pessoa, com barra de progresso. Abas por pessoa. Rotinas que se repetem (todo dia, em dias da semana ou uma vez por mês), por cômodo e responsável |
-| **Listas** | Listas compartilhadas (compras, farmácia, casa…): um adiciona, o outro vê na hora no mercado; mostra quem adicionou. Item pode ter prazo: aparece também em Tarefas |
+| **Listas** | Listas compartilhadas com catálogo de produtos reutilizáveis, finalização e histórico de compras, resumos por período e nota fiscal em armazenamento privado. Item pode ter prazo: aparece também em Tarefas. [Uso e ativação do MVP](docs/COMPRAS.md) |
 | **Veículos** | Vários veículos, manutenção/OBD e multas em grupos distintos, datas e prazos manuais, PDFs e imagens. Defesa e recurso têm campos próprios. Sem tarefas ou avisos automáticos. [Como usar e limites](docs/VEICULOS.md) |
 | **Contatos** | Médicos, escola, serviços da casa e números de emergência, com botão de ligar e de WhatsApp |
 | **Automação** | Importar dados de conversas com IA e do Google Agenda, chaves de API para agentes (Claude, Gemini, Manus, n8n…) e exportar um resumo da rotina para uma IA |

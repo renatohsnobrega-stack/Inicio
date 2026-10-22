@@ -530,3 +530,27 @@ td small.z.alerta { color: #b03a2e; }
   .main > .page-head:first-child .hello { color: #cbd5cc; }
   .widget { min-height: 132px; padding: 14px; }
 }
+
+/* Compras: catálogo e histórico leves, sem tabela horizontal no celular. */
+.purchase-tools h2, .purchase-history h2 { margin-top: 0; }
+.purchase-history summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.purchase-entry { border-top: 1px solid var(--line); padding: 14px 0; overflow-wrap: anywhere; }
+.purchase-entry h3 { font-size: 16px; margin: 0 0 6px; }
+.purchase-entry .actions { margin-top: 10px; }
+.purchase-history li { margin: 6px 0; overflow-wrap: anywhere; }
+.purchase-catalog { max-height: 45vh; overflow-y: auto; }
+.purchase-catalog [hidden] { display: none; }
+.purchase-catalog .check-row { min-height: 44px; }
+.purchase-form label.field { display: flex; flex-direction: column; gap: 6px; }
+.purchase-item-fields { border: 1px solid var(--line); border-radius: 10px; margin: 12px 0; padding: 10px; min-width: 0; }
+.purchase-item-fields legend { max-width: 100%; overflow-wrap: anywhere; font-weight: 600; }
+.purchase-item-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.purchase-item-grid label { min-width: 0; font-size: 12px; }
+.purchase-item-grid input { min-width: 0; width: 100%; margin-top: 5px; font-size: 16px; }
+.purchase-error { color: var(--bad); font-weight: 600; }
+.purchase-error:empty { display: none; }
+@media (max-width: 420px) {
+  .purchase-history .actions { align-items: stretch; }
+  .purchase-form .form-actions { flex-wrap: wrap; }
+  .purchase-form .form-actions .primary { flex: 1; }
+}
