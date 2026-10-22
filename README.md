@@ -8,7 +8,7 @@ Um sistema leve e privado para organizar a rotina da casa a dois:
 |---|---|
 | **Painel** | Resumo do dia: recados do mural, lista de compras, contas atrasadas ou próximas, remédios de hoje (com check), cardápio, tarefas e compromissos |
 | **Mural** | Recados rápidos entre vocês (“chego tarde hoje”), com opção de fixar no topo e marcar 👍 visto |
-| **Contas** | Contas mensais ou únicas, valor, vencimento, categoria, quem paga, forma de pagamento. Marca como paga e guarda a data e o valor pago |
+| **Contas** | Contas mensais ou únicas, pagamentos e seção **Impostos e taxas pessoais**: IPTU, IPVA/licenciamento, CRM PF e IRPF a pagar, com ano de referência, cota/parcela manual e filtros. Sem geração automática. [Detalhes](docs/IMPOSTOS-PESSOAIS.md) |
 | **Remédios** | Remédios e suplementos de cada pessoa da família (abas por pessoa), dose, horários, como tomar, início e fim. Checklist diário de doses tomadas. Controle de estoque: o app desconta as doses de cada dia e, 7 dias antes de acabar, avisa no Painel e põe o item na lista da farmácia |
 | **Alimentação** | Cardápio fixo da semana (café, almoço, lanche e jantar) da família e de cada pessoa (o que ficar vazio usa o da família), suplementos de cada um e observações da dieta |
 | **Calendário** | Compromissos (com repetição semanal, mensal ou anual — bom para aniversários) e vencimentos das contas |
@@ -128,7 +128,7 @@ testes/               testes automáticos das regras e integrações (node teste
 
 ## Ideias para as próximas versões
 
-O MVP do Foco permite **Começar · Pausar · Retomar** uma pendência, com próximo passo opcional, sem cronômetro ou novas notificações. Veja [o funcionamento, os testes e os próximos itens 7 (carro) e 8 (impostos e taxas)](docs/FOCO-E-PROXIMOS-ITENS.md). Os itens 7 e 8 estão apenas registrados, não implementados.
+O MVP do Foco permite **Começar · Pausar · Retomar** uma pendência, com próximo passo opcional, sem cronômetro ou novas notificações. Veja [o funcionamento, os testes e os próximos itens 7 (carro) e 8 (impostos e taxas)](docs/FOCO-E-PROXIMOS-ITENS.md). O item 7 (carro) continua apenas registrado. O item 8 tem um [MVP de obrigações pessoais dentro de Contas](docs/IMPOSTOS-PESSOAIS.md); tributos e renovações da PJ ficam para a sessão da PJ.
 
 - Lembretes por notificação no celular (horário do remédio, conta vencendo amanhã)
 - Ingredientes do cardápio enviados direto para a lista de compras

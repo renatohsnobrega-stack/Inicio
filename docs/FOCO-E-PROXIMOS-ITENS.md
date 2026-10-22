@@ -44,7 +44,7 @@ Antes de implementar: definir armazenamento e permissões dos anexos, limites de
 
 **Proposta inicial: seção “Impostos e taxas” dentro de Contas**, com filtros para IPTU, IPVA, CRM e outras taxas. Cada obrigação terá ano de referência, vencimento, valor, cota única ou parcelas, responsável, status e comprovantes/guias. Avaliar aba separada se houver muitas obrigações e necessidade de visão anual própria.
 
-Antes de implementar: modelar recorrência anual e parcelamento sem duplicar contas existentes; manter compartilhamento explícito por responsável/Ambos. Nenhuma conta real, guia, pagamento ou notificação foi criado nesta PR.
+A proposta acima foi recortada para um [MVP de obrigações pessoais dentro de Contas](IMPOSTOS-PESSOAIS.md), sem aba nova nem recorrência anual: cada cota/parcela é cadastrada manualmente e reutiliza o pagamento existente. IPTU, IPVA/licenciamento, CRM pessoa física e IRPF com valor a pagar estão incluídos. Tributos e renovações da PJ ficam para a sessão da PJ. Não há criação de cobranças reais ou alterações em notificações nesta implementação.
 
 ## Publicação
 
