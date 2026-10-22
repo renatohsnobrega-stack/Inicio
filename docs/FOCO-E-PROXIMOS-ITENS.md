@@ -32,13 +32,13 @@ npm test --prefix testes/banco
 
 O teste visual requer o pacote Python `playwright` e Chromium (instalado no sistema ou via `playwright install chromium`). Ele cria um servidor temporário só em localhost, substitui `config.js` por configuração vazia e bloqueia chamadas externas. O teste do banco usa somente Postgres embutido em memória (PGlite).
 
-## Próximos itens — apenas registrados
+## Próximos itens e seus MVPs
 
 ### 7. Manutenção do carro
 
-**Proposta inicial: seção “Carro / manutenção” dentro de Tarefas**, sem nova aba nesta etapa. Organizar por veículo, tipo de serviço, data da última manutenção, próximo prazo por data e/ou quilometragem e status. Guardar PDFs e imagens de OBD, comprovantes e revisão anual ligados ao histórico do veículo. Avaliar aba própria somente se o volume justificar.
+**MVP em seção própria “Veículos” (Mais → Veículos no celular)**, entregue por PR para revisão. A proposta inicial de usar Tarefas foi substituída por uma tela própria para manter histórico, anexos e prazos de multas distinguíveis e, principalmente, não tornar esses registros elegíveis às notificações automáticas de tarefas existentes.
 
-Antes de implementar: definir armazenamento e permissões dos anexos, limites de tamanho e se cada veículo pertence a uma pessoa ou a Ambos. Nenhum cadastro, upload ou lembrete foi criado nesta PR.
+Inclui vários veículos, registros manuais de manutenção, manutenção anual e OBD, data de realização, próximo prazo por data, quilometragem registrada e PDFs/imagens. Multas têm registro, vencimento, prazo de defesa e prazo de recurso próprios. Sem cálculo de manutenção por quilometragem, geração de revisões anuais ou lembretes. Os anexos pequenos compartilham a persistência e permissões da casa. Veja [como usar, limites e testes](VEICULOS.md). Nenhum veículo ou manutenção real foi criado; nenhum backend foi migrado ou publicado.
 
 ### 8. Impostos e taxas a pagar
 

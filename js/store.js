@@ -111,6 +111,37 @@ const Store = (() => {
     return obj;
   }
 
+  // Usada por Veículos: só atualiza a tela/cache depois que a persistência confirma.
+  // Evita indicar sucesso ao anexar arquivos se faltar espaço local ou a rede falhar.
+  async function putConfirmed(kind, data) {
+    const obj = Schema.normalize(kind, { ...data, id: data.id || U.uid() });
+    if (mode === 'local') {
+      const next = { ...cache, [kind]: { ...(cache[kind] || {}), [obj.id]: obj } };
+      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); }
+      catch { throw new Error('Não foi possível salvar neste navegador. Libere espaço ou reduza os anexos e tente novamente.'); }
+    } else {
+      const { error } = await sb.from('registros').upsert({ kind, id: obj.id, data: obj });
+      if (error) throw error;
+    }
+    setRow(kind, obj.id, obj);
+    emit();
+    return obj;
+  }
+
+  async function removeConfirmed(kind, id) {
+    if (mode === 'local') {
+      const items = { ...(cache[kind] || {}) };
+      delete items[id];
+      const next = { ...cache, [kind]: items };
+      localStorage.setItem(LS_KEY, JSON.stringify(next));
+    } else {
+      const { error } = await sb.from('registros').delete().eq('kind', kind).eq('id', id);
+      if (error) throw error;
+    }
+    if (cache[kind]) delete cache[kind][id];
+    emit();
+  }
+
   async function remove(kind, id) {
     if (cache[kind]) delete cache[kind][id];
     emit();
@@ -167,7 +198,7 @@ const Store = (() => {
   }
 
   return {
-    init, signIn, signOut, loadCloud, list, get, put, publishRecado, remove, removeMany, exportAll, importAll, rpc,
+    init, signIn, signOut, loadCloud, list, get, put, putConfirmed, publishRecado, remove, removeConfirmed, removeMany, exportAll, importAll, rpc,
     config: () => window.APP_CONFIG || {},
     mode: () => mode,
     user: () => user,

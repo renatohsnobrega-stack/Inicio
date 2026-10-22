@@ -305,6 +305,14 @@ const Schema = (() => {
     const o = { ...(raw || {}) };
     const str = (...ks) => ks.forEach(k => { if (o[k] != null && typeof o[k] !== 'string') o[k] = String(o[k]); if (typeof o[k] === 'string') o[k] = o[k].trim(); });
     switch (kind) {
+      // Tipos exclusivos da tela de Veículos neste MVP; fora da importação por IA.
+      case 'veiculo':
+        str('nome', 'placa', 'modelo', 'obs');
+        break;
+      case 'registro_veiculo':
+        str('titulo', 'veiculo', 'tipo', 'status', 'responsavel', 'obs', 'autoNumero');
+        // Não corrigir datas ou anexos silenciosamente: a tela valida antes de salvar.
+        break;
       case 'conta':
         str('nome', 'categoria', 'responsavel', 'forma', 'codigo', 'obs');
         ['referencia', 'guiaUrl', 'comprovanteUrl'].forEach(k => { if (typeof o[k] === 'string') o[k] = o[k].trim(); });
