@@ -200,17 +200,43 @@ const Store = (() => {
       throw new Error('Compra inválida: informe id, itens e snapshots originais dos itens marcados.');
     }
     const obj = Schema.normalize('compra', { ...purchase, id: String(purchase.id) });
+    const reviewedReceipt = obj.origem === 'nota-revisada';
+    if (obj.id.length > 200 || !obj.lista || String(obj.lista).length > 200 || obj.itens.length > 500 || sources.length > 500) {
+      throw new Error('Compra inválida: id, lista ou quantidade de itens fora dos limites permitidos.');
+    }
     const snapshots = sources.map(source => {
-      if (!source || typeof source !== 'object' || source.id == null || String(source.id).trim() === '') {
+      if (!source || typeof source !== 'object' || Array.isArray(source) || typeof source.id !== 'string' || source.id.trim() === '' || source.id.length > 200) {
         throw new Error('Snapshot inválido: cada item marcado precisa ter id.');
       }
       return { id: String(source.id), snapshot: JSON.parse(JSON.stringify(source)) };
     });
     if (new Set(snapshots.map(s => s.id)).size !== snapshots.length) throw new Error('Snapshot inválido: há itens repetidos.');
-    const lineIds = obj.itens.map(line => String(line?.itemId ?? ''));
-    if (!lineIds.length || lineIds.some(id => !id) || new Set(lineIds).size !== lineIds.length ||
-        lineIds.length !== snapshots.length || lineIds.some(id => !snapshots.some(source => source.id === id))) {
-      throw new Error('A compra deve conter exatamente uma linha para cada item selecionado.');
+    const lineIds = obj.itens.map(line => line && typeof line === 'object' && !Array.isArray(line) && typeof line.itemId === 'string' ? line.itemId : '');
+    if (!lineIds.length || lineIds.some(id => !id || id.length > 200) || new Set(lineIds).size !== lineIds.length) {
+      throw new Error('A compra precisa conter de 1 a 500 linhas com itemId válido e exclusivo.');
+    }
+    const sourceIds = new Set(snapshots.map(source => source.id));
+    if (reviewedReceipt) {
+      const invalidSynthetic = lineIds.some(id => !sourceIds.has(id) && !/^nota-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (snapshots.some(source => !lineIds.includes(source.id))) {
+        throw new Error('Cada item vinculado à lista precisa corresponder a exatamente uma linha da compra.');
+      }
+      if (invalidSynthetic) throw new Error('Linhas sem vínculo com a lista precisam usar um itemId sintético nota-<UUID>.');
+    } else if (!snapshots.length || lineIds.length !== snapshots.length || lineIds.some(id => !sourceIds.has(id))) {
+      throw new Error('A compra manual deve conter exatamente uma linha para cada item selecionado.');
+    }
+    for (const source of snapshots) {
+      if (!source.snapshot || typeof source.snapshot !== 'object' || Array.isArray(source.snapshot)) {
+        throw new Error('Snapshot inválido: cada item precisa conter um objeto original.');
+      }
+      if (source.snapshot.id != null && String(source.snapshot.id) !== source.id) {
+        throw new Error(`Snapshot inválido: o id ${source.id} diverge do id do item.`);
+      }
+      if (String(source.snapshot.lista ?? '') !== String(obj.lista)) throw new Error(`O item ${source.id} não pertence à lista desta compra.`);
+      const originalState = mode === 'cloud' ? itemRawSnapshots.get(source.id)?.raw : source.snapshot;
+      if (!reviewedReceipt && originalState?.feito != null && originalState.feito !== true) {
+        throw new Error(`O item ${source.id} não está marcado para compra.`);
+      }
     }
 
     if (mode === 'local') {

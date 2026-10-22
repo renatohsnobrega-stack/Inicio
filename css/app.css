@@ -554,3 +554,16 @@ td small.z.alerta { color: #b03a2e; }
   .purchase-form .form-actions { flex-wrap: wrap; }
   .purchase-form .form-actions .primary { flex: 1; }
 }
+
+/* OCR local: revisão explícita, nomes editáveis e texto bruto nunca executado. */
+.receipt-review .form-body { overflow-wrap: anywhere; }
+.receipt-review input:not([type=checkbox]), .receipt-review select { width: 100%; min-width: 0; font-size: 16px; }
+.receipt-review select { white-space: normal; }
+.receipt-review .receipt-raw { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 35vh; overflow-y: auto; background: var(--bg); padding: 10px; font-size: 12px; }
+.receipt-review details { margin-top: 14px; }
+.receipt-review summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+.receipt-preview img { width: 100%; height: auto; }
+.receipt-warnings { padding-left: 20px; font-size: 13px; }
+.receipt-confirm { margin-top: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; align-items: flex-start; }
+.receipt-progress { font-weight: 600; }
+.receipt-item .field { margin-bottom: 8px; }

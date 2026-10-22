@@ -15,8 +15,9 @@ const ComprasUI = (() => {
     return `<section class="panel purchase-tools">
       <h2>Compras sem reescrever</h2>
       <p class="muted small">Use os produtos desta lista e das compras anteriores para montar a próxima. Adicionar item acima continua disponível.</p>
-      <div class="actions">${button('Escolher produtos', 'purchase-catalog', lista.id)}${button('Finalizar compra', 'purchase-finish', lista.id, 'primary')}</div>
+      <div class="actions">${button('Escolher produtos', 'purchase-catalog', lista.id)}${button('Finalizar compra', 'purchase-finish', lista.id, 'primary')}<label class="btn">Ler nota fiscal<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-action="purchase-ocr" data-id="${e(lista.id)}" hidden></label></div>
       <p class="muted small">Marque o que comprou e finalize para guardar no histórico. O que faltar permanece na lista.</p>
+      <p class="muted small">Ou leia uma foto/PDF no próprio aparelho e revise os campos antes de guardar. Nenhuma nota é enviada a um provedor de OCR.</p>
     </section>
     <section class="panel purchase-history">
       <h2>Histórico de compras</h2>
@@ -29,7 +30,7 @@ const ComprasUI = (() => {
         <h3>${e(U.fmtDate(c.data))} · ${e(c.loja || 'Loja não informada')}</h3>
         <p><strong>Total: ${money(c.total)}</strong> · ${c.itens.length} produto(s)</p>
         <details><summary>Ver produtos</summary><ul>${c.itens.map(i => `<li>${e(i.texto)}${i.quantidade != null ? ` · ${e(number(i.quantidade))} ${e(i.unidade || '(sem unidade)')}` : ''}${i.preco != null ? ` · ${U.brl(i.preco)} / unidade informada` : ''}</li>`).join('')}</ul></details>
-        <div class="actions">${c.nota ? button('Abrir nota fiscal', 'purchase-receipt-open', c.id) : Store.mode() === 'cloud' ? `<label class="btn">Anexar nota fiscal<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-action="purchase-receipt" data-id="${e(c.id)}" hidden></label>` : '<p class="muted small">Anexos disponíveis no modo nuvem.</p>'}</div>
+        <div class="actions">${c.nota ? button('Abrir nota fiscal', 'purchase-receipt-open', c.id) + button('Baixar nota fiscal', 'purchase-receipt-download', c.id) : Store.mode() === 'cloud' ? `<label class="btn">Anexar nota fiscal<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-action="purchase-receipt" data-id="${e(c.id)}" hidden></label>` : '<p class="muted small">Anexos disponíveis no modo nuvem.</p>'}</div>
         ${c.nota ? `<p class="small muted">${e(c.nota.nome)} · arquivo privado</p>` : ''}
       </article>`).join('') : '<p class="empty">Nenhuma compra neste período.</p>'}
       ${compras.length > limite ? button('Mostrar mais compras', 'purchase-more', lista.id) : ''}
@@ -113,6 +114,12 @@ const ComprasUI = (() => {
   }
   async function action(name, el, refresh) {
     const id = el.dataset.id;
+    if (name === 'purchase-ocr') {
+      const file = el.files?.[0];
+      el.value = '';
+      if (file) return ReceiptUI.open(id, file, refresh);
+      return;
+    }
     if (name === 'purchase-catalog') return catalog(id, refresh);
     if (name === 'purchase-finish') return finish(id, refresh);
     if (name === 'purchase-month') { mes = el.value; limite = 12; return refresh(); }
@@ -131,6 +138,20 @@ const ComprasUI = (() => {
       try { await Store.attachPurchaseReceipt(id, file); refresh(); }
       catch (err) { alert(`A compra está salva, mas a nota não foi confirmada: ${err.message}`); }
       finally { el.disabled = false; el.value = ''; }
+      return;
+    }
+    if (name === 'purchase-receipt-download') {
+      el.disabled = true;
+      try {
+        const url = await Store.purchaseReceiptUrl(id);
+        if (new URL(url).origin !== new URL(Store.config().supabaseUrl).origin) throw new Error('Origem do arquivo inválida.');
+        const response = await fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (!response.ok) throw new Error('O link expirou ou o arquivo está indisponível. Tente novamente.');
+        const local = URL.createObjectURL(await response.blob());
+        const a = document.createElement('a'); a.href = local; a.download = Store.get('compra', id)?.nota?.nome || 'nota-fiscal'; a.click();
+        setTimeout(() => URL.revokeObjectURL(local), 1000);
+      } catch (err) { alert(`Não foi possível baixar a nota: ${err.message}`); }
+      finally { el.disabled = false; }
       return;
     }
     if (name === 'purchase-receipt-open') {

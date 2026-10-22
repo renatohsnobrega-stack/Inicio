@@ -15,30 +15,67 @@ declare
   v_current jsonb;
   v_source_id text;
   v_source_count integer;
+  v_line_count integer;
+  v_receipt_review boolean;
 begin
   if auth.uid() is null or not public.is_membro() then
     raise exception 'Acesso negado: somente membro autenticado pode finalizar compras' using errcode = '42501';
   end if;
-  if jsonb_typeof(p_purchase) <> 'object' or jsonb_typeof(p_sources) <> 'array' then
+  if jsonb_typeof(p_purchase) is distinct from 'object' or jsonb_typeof(p_sources) is distinct from 'array' then
     raise exception 'Compra ou snapshot de itens inválido';
   end if;
   v_id := nullif(p_purchase->>'id', '');
-  if v_id is null then raise exception 'A compra precisa de um id'; end if;
+  if jsonb_typeof(p_purchase->'id') is distinct from 'string' or v_id is null or length(v_id) > 200 then
+    raise exception 'A compra precisa de um id válido (até 200 caracteres)';
+  end if;
   if coalesce(p_purchase->>'kind', 'compra') <> 'compra' then
     raise exception 'Tipo de registro inválido para compra';
+  end if;
+  if jsonb_typeof(p_purchase->'lista') is distinct from 'string' or nullif(p_purchase->>'lista', '') is null or length(p_purchase->>'lista') > 200 then
+    raise exception 'A compra precisa indicar uma lista válida (até 200 caracteres)';
   end if;
   if jsonb_typeof(coalesce(p_purchase->'itens', 'null'::jsonb)) <> 'array' then
     raise exception 'A compra precisa conter uma lista de itens';
   end if;
+  v_receipt_review := coalesce(p_purchase->>'origem' = 'nota-revisada', false);
+  v_line_count := jsonb_array_length(p_purchase->'itens');
   v_source_count := jsonb_array_length(p_sources);
-  if v_source_count < 1 or v_source_count <> jsonb_array_length(p_purchase->'itens') then
-    raise exception 'A compra deve conter exatamente os itens selecionados para baixa';
+  if v_line_count < 1 or v_line_count > 500 or v_source_count > 500 then
+    raise exception 'A compra deve conter de 1 a 500 linhas e no máximo 500 fontes';
   end if;
-  if (select count(distinct value->>'itemId') from jsonb_array_elements(p_purchase->'itens')) <> v_source_count then
+  if not v_receipt_review and (v_source_count < 1 or v_source_count <> v_line_count) then
+    raise exception 'A compra manual deve conter exatamente os itens selecionados para baixa';
+  end if;
+  if exists (select 1 from jsonb_array_elements(p_purchase->'itens') i
+      where jsonb_typeof(i) is distinct from 'object' or jsonb_typeof(i->'itemId') is distinct from 'string'
+         or nullif(btrim(i->>'itemId'), '') is null or length(i->>'itemId') > 200) then
+    raise exception 'Cada linha da compra precisa ter itemId válido (até 200 caracteres)';
+  end if;
+  if (select count(distinct value->>'itemId') from jsonb_array_elements(p_purchase->'itens')) <> v_line_count then
     raise exception 'A compra contém itens repetidos ou sem itemId';
   end if;
-  if (select count(distinct value->>'id') from jsonb_array_elements(p_sources)) <> v_source_count then
+  if exists (select 1 from jsonb_array_elements(p_sources) s
+      where jsonb_typeof(s) is distinct from 'object' or jsonb_typeof(s->'snapshot') is distinct from 'object'
+         or nullif(btrim(coalesce(s->>'id', s->'snapshot'->>'id')), '') is null
+         or length(coalesce(s->>'id', s->'snapshot'->>'id')) > 200
+         or (s ? 'id' and jsonb_typeof(s->'id') is distinct from 'string')
+         or (s->'snapshot' ? 'id' and jsonb_typeof(s->'snapshot'->'id') is distinct from 'string')
+         or (s ? 'id' and s->'snapshot' ? 'id' and s->>'id' is distinct from s->'snapshot'->>'id')) then
+    raise exception 'Snapshot inválido: ids e objeto snapshot devem ser válidos e coincidir';
+  end if;
+  if (select count(distinct coalesce(value->>'id', value->'snapshot'->>'id')) from jsonb_array_elements(p_sources)) <> v_source_count then
     raise exception 'A seleção contém fontes repetidas ou sem id';
+  end if;
+  if exists (select 1 from jsonb_array_elements(p_sources) s
+      where not exists (select 1 from jsonb_array_elements(p_purchase->'itens') i
+        where i->>'itemId' = coalesce(s->>'id', s->'snapshot'->>'id'))) then
+    raise exception 'Toda fonte vinculada deve corresponder a exatamente uma linha da compra';
+  end if;
+  if v_receipt_review and exists (select 1 from jsonb_array_elements(p_purchase->'itens') i
+      where not exists (select 1 from jsonb_array_elements(p_sources) s
+        where coalesce(s->>'id', s->'snapshot'->>'id') = i->>'itemId')
+        and i->>'itemId' !~* '^nota-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') then
+    raise exception 'Linhas sem vínculo com a lista precisam usar itemId sintético nota-<UUID>';
   end if;
 
   -- Mesmo purchase id serializa reenvios; linhas de origem são bloqueadas abaixo.
@@ -58,10 +95,10 @@ begin
      order by coalesce(value->>'id', value->'snapshot'->>'id', '')
   loop
     v_source_id := coalesce(nullif(v_source->>'id', ''), nullif(v_source->'snapshot'->>'id', ''));
-    if v_source_id is null or jsonb_typeof(v_source->'snapshot') <> 'object' then
+    if v_source_id is null or jsonb_typeof(v_source->'snapshot') is distinct from 'object' then
       raise exception 'Snapshot de item inválido (id e objeto snapshot são obrigatórios)';
     end if;
-    if v_source->'snapshot' ? 'feito' and v_source->'snapshot'->>'feito' is distinct from 'true' then
+    if not v_receipt_review and v_source->'snapshot' ? 'feito' and v_source->'snapshot'->>'feito' is distinct from 'true' then
       raise exception 'O item % não está marcado para compra', v_source_id;
     end if;
     if v_source->'snapshot'->>'lista' is distinct from p_purchase->>'lista' then

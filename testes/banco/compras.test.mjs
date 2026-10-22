@@ -68,6 +68,52 @@ test('legacy item JSON without generated id, createdAt, or feito compares to its
   assert.deepEqual(await q(db, membro, `select id from public.registros where kind='item' and id='legacy-item'`), []);
 });
 
+test('reviewed receipt standalone import with no sources saves purchase and keeps list snapshots', async () => {
+  const pending = { ...item('pending-standalone', 'Feijão'), feito: false };
+  await db.query(`insert into public.registros(kind,id,data) values ('item',$1,$2::jsonb)`, [pending.id, JSON.stringify(pending)]);
+  const syntheticId = 'nota-12345678-1234-1234-1234-123456789abc';
+  const p = { ...compra('receipt-standalone', [syntheticId]), origem: 'nota-revisada' };
+  const saved = await savePurchase(membro, p, []);
+  assert.equal(saved[0].saved.id, p.id);
+  assert.deepEqual(await q(db, membro, `select id from public.registros where kind='item' and id=$1`, [pending.id]), [{ id: pending.id }]);
+  assert.deepEqual(await q(db, membro, `select id from public.registros where kind='compra' and id=$1`, [p.id]), [{ id: p.id }]);
+});
+
+test('reviewed receipt linked subset deletes only linked snapshots, even when pending', async () => {
+  const pending = { ...item('receipt-linked', 'Leite'), feito: false };
+  const keep = item('receipt-unrelated', 'Pão');
+  await db.query(`insert into public.registros(kind,id,data) values ('item',$1,$2::jsonb),('item',$3,$4::jsonb)`,
+    [pending.id, JSON.stringify(pending), keep.id, JSON.stringify(keep)]);
+  const syntheticId = 'nota-22345678-1234-1234-1234-123456789abc';
+  const p = { ...compra('receipt-subset', [pending.id, syntheticId]), origem: 'nota-revisada' };
+  const saved = await savePurchase(membro, p, source(pending));
+  assert.equal(saved[0].saved.id, p.id);
+  assert.deepEqual(await q(db, membro, `select id from public.registros where kind='item' and id in ($1,$2) order by id`, [pending.id, keep.id]), [{ id: keep.id }]);
+});
+
+test('receipt source conflict, mismatched IDs and missing synthetic IDs abort without partial writes; manual mode stays strict', async () => {
+  const current = item('receipt-stale', 'Leite');
+  const stale = { ...current, texto: 'Versão antiga' };
+  await db.query(`insert into public.registros(kind,id,data) values ('item',$1,$2::jsonb)`, [current.id, JSON.stringify(current)]);
+  const synthetic = 'nota-32345678-1234-1234-1234-123456789abc';
+  const receipt = { ...compra('receipt-stale-purchase', [current.id, synthetic]), origem: 'nota-revisada' };
+  const staleError = await erro(db, membro, `select public.finalize_purchase($1::jsonb,$2::jsonb)`,
+    [JSON.stringify(receipt), JSON.stringify(source(stale))]);
+  assert.match(staleError || '', /mudou desde a seleção/);
+  assert.deepEqual(await q(db, membro, `select id from public.registros where kind='compra' and id=$1`, [receipt.id]), []);
+  assert.deepEqual(await q(db, membro, `select id from public.registros where kind='item' and id=$1`, [current.id]), [{ id: current.id }]);
+
+  const mismatched = await erro(db, membro, `select public.finalize_purchase($1::jsonb,$2::jsonb)`,
+    [JSON.stringify({ ...receipt, id: 'receipt-id-mismatch' }), JSON.stringify([{ id: current.id, snapshot: { ...current, id: 'different-item' } }])]);
+  assert.match(mismatched || '', /ids.*coincidir/);
+  const noSynthetic = await erro(db, membro, `select public.finalize_purchase($1::jsonb,$2::jsonb)`,
+    [JSON.stringify({ ...receipt, id: 'receipt-no-synthetic', itens: [{ itemId: 'unlinked-real-id', texto: 'Produto' }] }), '[]']);
+  assert.match(noSynthetic || '', /sintético/);
+  const manualMismatch = await erro(db, membro, `select public.finalize_purchase($1::jsonb,$2::jsonb)`,
+    [JSON.stringify(compra('manual-empty-sources')), '[]']);
+  assert.match(manualMismatch || '', /exatamente os itens selecionados/);
+});
+
 test('a stale source aborts the whole transaction without partial purchase or item deletion', async () => {
   const originalA = item('item-a', 'A');
   const originalB = item('item-b', 'B');
@@ -87,7 +133,7 @@ test('purchase payload must match the selected source ids, list and marked state
   await db.query(`insert into public.registros(kind,id,data) values ('item','item-extra',$1::jsonb)`, [JSON.stringify(extra)]);
   const mismatched = await erro(db, membro, `select public.finalize_purchase($1::jsonb,$2::jsonb)`,
     [JSON.stringify(compra('purchase-missing-source', ['other'])), JSON.stringify(source(extra))]);
-  assert.match(mismatched || '', /não está incluído/);
+  assert.match(mismatched || '', /corresponder a exatamente uma linha/);
   const wrongList = { ...extra, lista: 'outra' };
   const mismatchList = await erro(db, membro, `select public.finalize_purchase($1::jsonb,$2::jsonb)`,
     [JSON.stringify(compra('purchase-wrong-list', ['item-extra'])), JSON.stringify(source(wrongList))]);

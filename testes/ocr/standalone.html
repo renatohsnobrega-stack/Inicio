@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ReceiptOCR standalone browser test</title>
+<input id="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp">
+<button id="read" type="button">Read locally</button>
+<output id="progress"></output>
+<pre id="result"></pre>
+<script src="../../js/receipt-ocr.js"></script>
+<script>
+  window.lastResult = null;
+  document.querySelector('#read').addEventListener('click', async () => {
+    const file = document.querySelector('#file').files[0];
+    try {
+      window.lastResult = await window.ReceiptOCR.read(file, {
+        onProgress(value) { document.querySelector('#progress').textContent = JSON.stringify(value); },
+      });
+      document.querySelector('#result').textContent = JSON.stringify(window.lastResult);
+    } catch (e) {
+      window.lastResult = { error: e.name + ': ' + e.message };
+      document.querySelector('#result').textContent = JSON.stringify(window.lastResult);
+    }
+  });
+</script>
